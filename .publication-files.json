@@ -47,6 +47,8 @@
   "rivet-h2/tests/scenarios.py",
   "rivet-h2/tests/verify.py",
   "rivet-h3/README.md",
+  "rivet-h3/REPORT.pdf",
+  "rivet-h3/REPORT.tex",
   "rivet-h3/STATUS.json",
   "rivet-h3/design/ARCHITECTURE.md",
   "rivet-h3/design/SPEC.md",
