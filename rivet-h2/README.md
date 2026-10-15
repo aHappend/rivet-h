@@ -2,7 +2,7 @@
 
 HMAC-SHA-256 and context save/restore.
 
-**Status:** Not accepted (designer).
+**Status:** Not accepted (verifier).
 
 The independently reviewed product report has not been published yet.
 
