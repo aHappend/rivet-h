@@ -1,6 +1,6 @@
 {
   "chip": "RIVET-H3",
-  "phase": "interrupted",
+  "phase": "checks",
   "engineering_accepted": false,
   "report_published": false,
   "checks": []
