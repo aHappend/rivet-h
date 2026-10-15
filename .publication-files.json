@@ -1,0 +1,18 @@
+[
+  ".gitignore",
+  "LICENSE",
+  "PUBLISHING.md",
+  "README.md",
+  "README.zh-CN.md",
+  "brand/icon.svg",
+  "brand/logo-dark.svg",
+  "brand/logo.svg",
+  "brand/mark-dark.svg",
+  "brand/mark.svg",
+  "rivet-h1/README.md",
+  "rivet-h1/STATUS.json",
+  "rivet-h2/README.md",
+  "rivet-h2/STATUS.json",
+  "rivet-h3/README.md",
+  "rivet-h3/STATUS.json"
+]
