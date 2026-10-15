@@ -1,7 +1,58 @@
 {
   "chip": "RIVET-H1",
-  "phase": "checks",
-  "engineering_accepted": false,
+  "phase": "completed",
+  "engineering_accepted": true,
   "report_published": false,
-  "checks": []
+  "checks": [
+    {
+      "check": "check:behavior",
+      "status": "passed"
+    },
+    {
+      "check": "check:sensitivity",
+      "status": "passed"
+    },
+    {
+      "check": "check:synthesis",
+      "status": "passed"
+    },
+    {
+      "check": "check:portable",
+      "status": "passed"
+    }
+  ],
+  "reproduce": [
+    [
+      "python3",
+      "tests/verify.py",
+      "--suite",
+      "behavior",
+      "--out",
+      "evidence/behavior"
+    ],
+    [
+      "python3",
+      "tests/verify.py",
+      "--suite",
+      "sensitivity",
+      "--out",
+      "evidence/sensitivity"
+    ],
+    [
+      "python3",
+      "tests/verify.py",
+      "--suite",
+      "synthesis",
+      "--out",
+      "evidence/synthesis"
+    ],
+    [
+      "python3",
+      "tests/verify.py",
+      "--suite",
+      "portable",
+      "--out",
+      "evidence/portable"
+    ]
+  ]
 }
