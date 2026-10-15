@@ -13,7 +13,7 @@
 | Generation | Design | Scope | Engineering status | Product report |
 |---|---|---|---|---|
 | 1 | [RIVET-H1](rivet-h1/) | SHA-256 streaming hash, message length, padding and digest output | Engineering accepted | [PDF](rivet-h1/REPORT.pdf) |
-| 2 | [RIVET-H2](rivet-h2/) | HMAC-SHA-256 and context save/restore | Not accepted (checks) | Pending |
+| 2 | [RIVET-H2](rivet-h2/) | HMAC-SHA-256 and context save/restore | Engineering accepted | Pending |
 | 3 | [RIVET-H3](rivet-h3/) | SHA-512 and multichannel hash/message authentication | Not accepted (planned) | Pending |
 
 `Engineering accepted` 表示原生工程验收已通过；`Not accepted` 表示尚未验收；`Pending` 表示报告尚未发布。规划不算成果，后续代际不覆盖前代目录。

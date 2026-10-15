@@ -1,7 +1,70 @@
 {
   "chip": "RIVET-H2",
-  "phase": "checks",
-  "engineering_accepted": false,
+  "phase": "completed",
+  "engineering_accepted": true,
   "report_published": false,
-  "checks": []
+  "checks": [
+    {
+      "check": "check:behavior",
+      "status": "passed"
+    },
+    {
+      "check": "check:compatibility",
+      "status": "passed"
+    },
+    {
+      "check": "check:defect_sensitivity",
+      "status": "passed"
+    },
+    {
+      "check": "check:synthesis",
+      "status": "passed"
+    },
+    {
+      "check": "check:portable_reproduction",
+      "status": "passed"
+    }
+  ],
+  "reproduce": [
+    [
+      "python3",
+      "tests/verify.py",
+      "--check",
+      "behavior",
+      "--output",
+      "evidence/behavior"
+    ],
+    [
+      "python3",
+      "tests/verify.py",
+      "--check",
+      "compatibility",
+      "--output",
+      "evidence/compatibility"
+    ],
+    [
+      "python3",
+      "tests/verify.py",
+      "--check",
+      "defects",
+      "--output",
+      "evidence/defects"
+    ],
+    [
+      "python3",
+      "tests/verify.py",
+      "--check",
+      "synthesis",
+      "--output",
+      "evidence/synthesis"
+    ],
+    [
+      "python3",
+      "tests/verify.py",
+      "--check",
+      "portable",
+      "--output",
+      "evidence/portable"
+    ]
+  ]
 }
