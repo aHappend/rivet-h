@@ -2,7 +2,7 @@
 
 SHA-512 and multichannel hash/message authentication.
 
-**Status:** Not accepted (checks).
+**Status:** Not accepted (interrupted).
 
 The independently reviewed product report has not been published yet.
 
