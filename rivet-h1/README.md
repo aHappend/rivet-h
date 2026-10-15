@@ -2,7 +2,7 @@
 
 SHA-256 streaming hash, message length, padding and digest output.
 
-**Status:** Not accepted (verifier).
+**Status:** Not accepted (checks).
 
 The independently reviewed product report has not been published yet.
 

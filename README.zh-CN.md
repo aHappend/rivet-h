@@ -12,7 +12,7 @@
 
 | Generation | Design | Scope | Engineering status | Product report |
 |---|---|---|---|---|
-| 1 | [RIVET-H1](rivet-h1/) | SHA-256 streaming hash, message length, padding and digest output | Not accepted (verifier) | Pending |
+| 1 | [RIVET-H1](rivet-h1/) | SHA-256 streaming hash, message length, padding and digest output | Not accepted (checks) | Pending |
 | 2 | [RIVET-H2](rivet-h2/) | HMAC-SHA-256 and context save/restore | Not accepted (planned) | Pending |
 | 3 | [RIVET-H3](rivet-h3/) | SHA-512 and multichannel hash/message authentication | Not accepted (planned) | Pending |
 
