@@ -1,0 +1,442 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=22mm,headheight=14pt]{geometry}
+
+\usepackage{longtable,booktabs,array,hyperref,xcolor,tikz,fancyhdr}
+
+\usepackage{fontspec,xeCJK}
+
+\setmainfont[Ligatures=TeXOff]{Times New Roman}
+
+\setsansfont[Ligatures=TeXOff]{Times New Roman}
+
+\setmonofont[Ligatures=TeXOff,WordSpace={1,1,1}]{Times New Roman}
+
+\setCJKmainfont{Noto Serif CJK SC}
+
+\setCJKsansfont{Noto Serif CJK SC}
+
+\setCJKmonofont{Noto Serif CJK SC}
+
+\newfontfamily\vulcanmathsymbols{Noto Serif CJK SC}
+
+\XeTeXgenerateactualtext=1
+
+\definecolor{vulcan}{HTML}{BB3E23}
+
+\pgfdeclarelayer{connections}\pgfdeclarelayer{edge labels}\pgfsetlayers{connections,main,edge labels}
+
+\hypersetup{hidelinks}
+
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\setlength{\emergencystretch}{5em}\tolerance=2000\hbadness=10000
+
+\setlength{\parindent}{0pt}\setlength{\parskip}{5pt}
+
+\pagestyle{fancy}\fancyhf{}\fancyhead[L]{\small\sffamily VULCAN}
+
+\fancyhead[R]{\small Product design and verification}\fancyfoot[C]{\thepage}
+
+\begin{document}
+
+{\sffamily\huge\raggedright\textbf{RIVET-H2: SHA-256 and HMAC-SHA-256 RTL with Portable Context Save/\allowbreak{}Restore}\par}
+
+{\large Technical Design and Verification Report}\par
+
+16 October 2026 (\allowbreak{}UTC+\allowbreak{}8)\allowbreak{}\par\textcolor{vulcan}{\rule{\textwidth}{0.5pt}}
+
+\begin{abstract}
+
+RIVET-H2 is synthesizable,\allowbreak{} single-clock cryptographic RTL for streamed SHA-256 and HMAC-SHA-256 computation. It preserves the default RIVET-H1 stream-mask behavior and adds streamed key normalization,\allowbreak{} reusable HMAC seeds and complete software-managed context images. One iterative compressor serves all cryptographic phases; software explicitly exchanges contexts rather than relying on hardware context slots.
+
+
+The six-cell Icarus matrix completed 6,\allowbreak{}981 independently checked messages: 2,\allowbreak{}472 SHA and 4,\allowbreak{}509 HMAC,\allowbreak{} with zero digest bit mismatches and 2,\allowbreak{}184 context restores. Separate executions covered million-a in both configurations,\allowbreak{} Verilator behavioral subsets,\allowbreak{} 164 paired H1/\allowbreak{}H2 messages,\allowbreak{} six functionally detected RTL mutations and clean-directory reproduction. Generic synthesis retained 5,\allowbreak{}768 state bits in both configurations without inferred latches or black boxes. These are functional simulation and generic synthesis results,\allowbreak{} not physical implementation or security-certification measurements. [\allowbreak{}E026–E030]\allowbreak{}
+
+
+\end{abstract}
+
+\section{Architecture and design rationale}
+
+The design uses one active context and one shared SHA-256 compressor. This minimizes duplicated cryptographic arithmetic while allowing software to retain any number of external context images. Quiescent-only save/\allowbreak{}restore excludes transient scheduler,\allowbreak{} padding and key-hash state from the exported format. A registered input beat drains one byte per subsequent edge,\allowbreak{} allowing restored partial blocks and beats crossing block boundaries to use the same assembly logic. Compressor and schedule arithmetic derive from the supplied immutable H1 reference,\allowbreak{} with cancellation clearing added; independent cryptographic references establish correctness. [\allowbreak{}E001–E013]\allowbreak{}
+
+\begin{center}\begin{tikzpicture}[every node/.style={font=\small\sffamily},>=latex]
+
+\node[draw=vulcan,rounded corners,fill=vulcan!4,text width=3.8cm,minimum height=1cm,align=center] (b0) at (0.0,0.0) {B1: Controller};
+
+\node[draw=vulcan,rounded corners,fill=vulcan!4,text width=3.8cm,minimum height=1cm,align=center] (b1) at (5.4,0.0) {B2: Stream assembly};
+
+\node[draw=vulcan,rounded corners,fill=vulcan!4,text width=3.8cm,minimum height=1cm,align=center] (b2) at (10.8,0.0) {B3: HMAC manager};
+
+\node[draw=vulcan,rounded corners,fill=vulcan!4,text width=3.8cm,minimum height=1cm,align=center] (b3) at (0.0,-4.6) {B4: Context codec};
+
+\node[draw=vulcan,rounded corners,fill=vulcan!4,text width=3.8cm,minimum height=1cm,align=center] (b4) at (5.4,-4.6) {B5: SHA compressor};
+
+\node[draw=vulcan,rounded corners,fill=vulcan!4,text width=3.8cm,minimum height=1cm,align=center] (b5) at (10.8,-4.6) {B6: Word schedule};
+
+\begin{pgfonlayer}{connections}
+
+\draw[->,black!65,rounded corners=2pt] ([yshift=-0.192cm]b0.east) -- (2.340,-0.192) -- (2.340,-3.470) -- coordinate[midway] (e0) (5.000,-3.470) -- ([xshift=-0.400cm]b1.south);
+
+\draw[->,black!65,rounded corners=2pt] ([yshift=0.000cm]b1.east) -- (7.820,0.000) -- (7.820,-3.210) -- coordinate[midway] (e1) (-0.533,-3.210) -- ([xshift=-0.533cm]b0.south);
+
+\draw[->,black!65,rounded corners=2pt] ([yshift=-0.064cm]b0.east) -- (2.500,-0.064) -- (2.500,-2.950) -- coordinate[midway] (e2) (10.533,-2.950) -- ([xshift=-0.267cm]b2.south);
+
+\draw[->,black!65,rounded corners=2pt] ([yshift=0.000cm]b2.east) -- (13.380,0.000) -- (13.380,-2.690) -- coordinate[midway] (e3) (-0.267,-2.690) -- ([xshift=-0.267cm]b0.south);
+
+\draw[->,black!65,rounded corners=2pt] ([yshift=0.064cm]b0.east) -- (2.660,0.064) -- (2.660,-2.430) -- coordinate[midway] (e4) (0.000,-2.430) -- ([xshift=0.000cm]b3.north);
+
+\draw[->,black!65,rounded corners=2pt] ([yshift=0.000cm]b3.east) -- (2.740,-4.600) -- (2.740,-2.170) -- coordinate[midway] (e5) (0.267,-2.170) -- ([xshift=0.267cm]b0.south);
+
+\draw[->,black!65,rounded corners=2pt] ([yshift=0.192cm]b0.east) -- (2.820,0.192) -- (2.820,-1.910) -- coordinate[midway] (e6) (5.400,-1.910) -- ([xshift=0.000cm]b4.north);
+
+\draw[->,black!65,rounded corners=2pt] ([yshift=-0.107cm]b4.east) -- (8.300,-4.707) -- (8.300,-1.650) -- coordinate[midway] (e7) (0.533,-1.650) -- ([xshift=0.533cm]b0.south);
+
+\draw[->,black!65,rounded corners=2pt] ([yshift=0.107cm]b4.east) -- (8.380,-4.493) -- (8.380,-5.990) -- coordinate[midway] (e8) (11.067,-5.990) -- ([xshift=0.267cm]b5.south);
+
+\draw[->,black!65,rounded corners=2pt] ([yshift=0.000cm]b5.east) -- (13.860,-4.600) -- (13.860,-5.730) -- coordinate[midway] (e9) (5.800,-5.730) -- ([xshift=0.400cm]b4.south);
+
+\end{pgfonlayer}
+
+\begin{pgfonlayer}{edge labels}
+
+\node[fill=white,inner sep=1pt,font=\scriptsize] at (e0) {E1};
+
+\node[fill=white,inner sep=1pt,font=\scriptsize] at (e1) {E2};
+
+\node[fill=white,inner sep=1pt,font=\scriptsize] at (e2) {E3};
+
+\node[fill=white,inner sep=1pt,font=\scriptsize] at (e3) {E4};
+
+\node[fill=white,inner sep=1pt,font=\scriptsize] at (e4) {E5};
+
+\node[fill=white,inner sep=1pt,font=\scriptsize] at (e5) {E6};
+
+\node[fill=white,inner sep=1pt,font=\scriptsize] at (e6) {E7};
+
+\node[fill=white,inner sep=1pt,font=\scriptsize] at (e7) {E8};
+
+\node[fill=white,inner sep=1pt,font=\scriptsize] at (e8) {E9};
+
+\node[fill=white,inner sep=1pt,font=\scriptsize] at (e9) {E10};
+
+\end{pgfonlayer}
+
+\end{tikzpicture}\end{center}
+
+{\small Functional block map, not a gate-level netlist. Edge identifiers match the directed relationships below. Crossings do not denote junctions; separate attachment points preserve arrow directions.}
+
+{\small\begin{longtable}{@{}L{0.24\textwidth}L{0.7\textwidth}@{}}\toprule
+
+\textbf{Block} & \textbf{Responsi\allowbreak{}bility}\\\midrule\endhead
+
+B1: Controll\allowbreak{}er & rivet\_\allowbreak{}h2\_\allowbreak{}top arbitrat\allowbreak{}es commands and streams,\allowbreak{} owns mode,\allowbreak{} byte count and chaining state,\allowbreak{} prepares register\allowbreak{}ed compress\allowbreak{}ion work,\allowbreak{} and holds digest/\allowbreak{}context outputs.\\[3pt]
+
+B2: Stream assembly & u\_\allowbreak{}stream stages one 32-bit beat and assemble\allowbreak{}s a 512-bit block byte by byte. Block release preserve\allowbreak{}s any remainin\allowbreak{}g staged bytes; unused buffer bytes remain zero.\\[3pt]
+
+B3: HMAC manager & u\_\allowbreak{}hmac retains the first 64 key bytes,\allowbreak{} selects normaliz\allowbreak{}ed key material,\allowbreak{} construc\allowbreak{}ts ipad/\allowbreak{}opad blocks and stores installe\allowbreak{}d inner/\allowbreak{}outer seeds. Temporar\allowbreak{}y normaliz\allowbreak{}ed-key storage clears after installa\allowbreak{}tion.\\[3pt]
+
+B4: Context codec & u\_\allowbreak{}context encodes the canonica\allowbreak{}l 1,\allowbreak{}536-bit image and validate\allowbreak{}s an entire restore candidat\allowbreak{}e before the controll\allowbreak{}er commits imported ownershi\allowbreak{}p.\\[3pt]
+
+B5: SHA compress\allowbreak{}or & u\_\allowbreak{}compress performs 64 SHA-256 rounds and feed-forward for message blocks,\allowbreak{} key hashing,\allowbreak{} seed generati\allowbreak{}on and HMAC inner/\allowbreak{}outer processi\allowbreak{}ng.\\[3pt]
+
+B6: Word schedule & u\_\allowbreak{}compress.u\_\allowbreak{}schedule holds sixteen 32-bit schedule words and supplies the compress\allowbreak{}or's round word.\\[3pt]
+
+\bottomrule\end{longtable}}
+
+{\small\begin{longtable}{@{}L{0.24\textwidth}L{0.7\textwidth}@{}}\toprule
+
+\textbf{Directed relation\allowbreak{}ship} & \textbf{Meaning}\\\midrule\endhead
+
+E1: B1 to B2 & Capture,\allowbreak{} drain,\allowbreak{} clear and restore control\\[3pt]
+
+E2: B2 to B1 & Assemble\allowbreak{}d block and staged-byte status\\[3pt]
+
+E3: B1 to B3 & Key ingestio\allowbreak{}n,\allowbreak{} normaliz\allowbreak{}ation and seed writes\\[3pt]
+
+E4: B3 to B1 & Installe\allowbreak{}d seeds and ipad/\allowbreak{}opad blocks\\[3pt]
+
+E5: B1 to B4 & Active image fields and restore candidat\allowbreak{}e\\[3pt]
+
+E6: B4 to B1 & Canonica\allowbreak{}l image and validati\allowbreak{}on result\\[3pt]
+
+E7: B1 to B5 & Register\allowbreak{}ed block/\allowbreak{}state,\allowbreak{} launch and cancella\allowbreak{}tion\\[3pt]
+
+E8: B5 to B1 & Compress\allowbreak{}ion result and completi\allowbreak{}on\\[3pt]
+
+E9: B5 to B6 & Block load and round progress\allowbreak{}ion\\[3pt]
+
+E10: B6 to B5 & 32-bit round word\\[3pt]
+
+\bottomrule\end{longtable}}
+
+\section{Interfaces and configuration}
+
+{\small\begin{longtable}{@{}L{0.2\textwidth}L{0.12\textwidth}L{0.1\textwidth}L{0.48\textwidth}@{}}\toprule
+
+\textbf{Signal /\allowbreak{} group} & \textbf{Directio\allowbreak{}n} & \textbf{Width} & \textbf{Contract}\\\midrule\endhead
+
+clk,\allowbreak{} rst\_\allowbreak{}n & Input & 1 bit each & One clock domain; active-low asynchro\allowbreak{}nous reset. Every public output is zero while reset is asserted.\\[3pt]
+
+s\_\allowbreak{}valid,\allowbreak{} s\_\allowbreak{}data,\allowbreak{} s\_\allowbreak{}keep,\allowbreak{} s\_\allowbreak{}last; s\_\allowbreak{}ready & Input; output readines\allowbreak{}s & 1,\allowbreak{} 32,\allowbreak{} 4,\allowbreak{} 1; 1 bit & Message stream transfer\allowbreak{}s on s\_\allowbreak{}valid \&\& s\_\allowbreak{}ready before a rising edge. Bytes are consumed from data[\allowbreak{}31:24]\allowbreak{} toward data[\allowbreak{}7:0]\allowbreak{}; keep marks contiguo\allowbreak{}us most-signific\allowbreak{}ant byte lanes.\\[3pt]
+
+k\_\allowbreak{}valid,\allowbreak{} k\_\allowbreak{}data,\allowbreak{} k\_\allowbreak{}keep,\allowbreak{} k\_\allowbreak{}last; k\_\allowbreak{}ready & Input; output readines\allowbreak{}s & 1,\allowbreak{} 32,\allowbreak{} 4,\allowbreak{} 1; 1 bit & Exclusiv\allowbreak{}e key stream after KEY\_\allowbreak{}LOAD,\allowbreak{} using the message stream's lane and mask rules. Key and message transfer\allowbreak{}s cannot interlea\allowbreak{}ve.\\[3pt]
+
+m\_\allowbreak{}valid,\allowbreak{} m\_\allowbreak{}digest; m\_\allowbreak{}ready & Output; input readines\allowbreak{}s & 1,\allowbreak{} 256; 1 bit & Complete SHA-256 or HMAC-SHA-256 digest. Validity and payload remain stable under backpres\allowbreak{}sure unless reset or accepted CANCEL discards the result.\\[3pt]
+
+cmd\_\allowbreak{}valid,\allowbreak{} cmd\_\allowbreak{}op,\allowbreak{} cmd\_\allowbreak{}context; cmd\_\allowbreak{}ready & Input; output readines\allowbreak{}s & 1,\allowbreak{} 3,\allowbreak{} 1536; 1 bit & Command channel. Encoding\allowbreak{}s are 0 SHA\_\allowbreak{}INIT,\allowbreak{} 1 KEY\_\allowbreak{}LOAD,\allowbreak{} 2 HMAC\_\allowbreak{}INIT,\allowbreak{} 3 SAVE,\allowbreak{} 4 RESTORE and 5 CANCEL; 6/\allowbreak{}7 are illegal. cmd\_\allowbreak{}context supplies the RESTORE image.\\[3pt]
+
+ctx\_\allowbreak{}valid,\allowbreak{} ctx\_\allowbreak{}data; ctx\_\allowbreak{}ready & Output; input readines\allowbreak{}s & 1,\allowbreak{} 1536; 1 bit & Register\allowbreak{}ed SAVE response,\allowbreak{} held stable until retireme\allowbreak{}nt or explicit cancella\allowbreak{}tion. No new output retires on its creation edge.\\[3pt]
+
+error & Output & 1 bit & Sticky FAULT indicati\allowbreak{}on. Only reset or accepted CANCEL recovers. All ports are unsigned.\\[3pt]
+
+\bottomrule\end{longtable}}
+
+{\small\begin{longtable}{@{}L{0.23\textwidth}L{0.12\textwidth}L{0.57\textwidth}@{}}\toprule
+
+\textbf{Paramete\allowbreak{}r} & \textbf{Default} & \textbf{Meaning /\allowbreak{} supporte\allowbreak{}d values}\\\midrule\endhead
+
+PARTIAL\_\allowbreak{}BEATS & 0 & Integer; only 0 and 1 are supporte\allowbreak{}d and both were exercise\allowbreak{}d. Value 0 preserve\allowbreak{}s strict H1 masks. Value 1 addition\allowbreak{}ally permits 1–3-byte non-final beats and zero-byte final beats after nonempty prefixes. Values -1 and 2 were executed and rejected with the explicit paramete\allowbreak{}r diagnost\allowbreak{}ic.\\[3pt]
+
+\bottomrule\end{longtable}}
+
+\section{Behavior and corner cases}
+
+\subsection{Exact cryptographic arithmetic}
+
+SHA-256 follows FIPS 180-4: eight 32-bit words,\allowbreak{} modulo-2\textasciicircum{}32 additions,\allowbreak{} prescribed rotations/\allowbreak{}constants,\allowbreak{} big-endian words and a 64-bit big-endian padded bit length. HMAC follows RFC 2104/\allowbreak{}4231: keys of at most 64 bytes are zero-padded; longer keys become SHA256(\allowbreak{}key)\allowbreak{} followed by 32 zero bytes. Empty keys are legal. Installed seeds are compression states after the 64-byte ipad/\allowbreak{}opad prefixes. The full 256-bit HMAC is returned even for RFC case 5.
+
+\subsection{Streaming and length boundaries}
+
+Default non-final beats require keep=\allowbreak{}1111; final beats allow 1000,\allowbreak{} 1100,\allowbreak{} 1110 or 1111. Default keep=\allowbreak{}0000 is legal only for an empty final transaction. Both configurations reject non-contiguous masks and zero-byte non-final beats. Maximum SHA message/\allowbreak{}key length is 2\textasciicircum{}61-1 bytes; maximum HMAC user-message length is 2\textasciicircum{}61-65 bytes,\allowbreak{} accounting for the inner prefix. A whole overflowing beat is rejected before any byte is consumed.
+
+\subsection{Mode and key ownership}
+
+SHA\_\allowbreak{}INIT,\allowbreak{} KEY\_\allowbreak{}LOAD and HMAC\_\allowbreak{}INIT require quiescence and zero current user bytes; HMAC\_\allowbreak{}INIT additionally requires an installed key. SHA\_\allowbreak{}INIT retains seeds. KEY\_\allowbreak{}LOAD invalidates the old key,\allowbreak{} exclusively ingests and hashes the key,\allowbreak{} derives both seeds,\allowbreak{} then returns to empty SHA. Short keys also traverse the hash engine,\allowbreak{} although normalization uses their original bytes. Digest retirement starts another empty message in the same mode with the same installed key.
+
+\subsection{Command arbitration and faults}
+
+Quiescence excludes staged bytes,\allowbreak{} a full uncompressed block,\allowbreak{} active compression/\allowbreak{}finalization/\allowbreak{}key processing and pending outputs. An eligible command suppresses stream readiness. RESTORE may replace a nonempty quiescent message; SAVE is non-destructive. Busy ordinary requests are unaccepted. Requests held through finalization become eligible only after digest retirement and therefore act on the newly empty context. Accepted illegal masks,\allowbreak{} lengths,\allowbreak{} images or commands enter FAULT with no digest/\allowbreak{}context validity; only CANCEL remains ready.
+
+\subsection{Complete context format}
+
+Version 1 uses bits [\allowbreak{}31:0]\allowbreak{}=\allowbreak{}0x52485632; [\allowbreak{}39:32]\allowbreak{}=\allowbreak{}1; [\allowbreak{}40]\allowbreak{}=\allowbreak{}mode; [\allowbreak{}41]\allowbreak{}=\allowbreak{}key\_\allowbreak{}valid; [\allowbreak{}47:42]\allowbreak{}=\allowbreak{}zero; [\allowbreak{}111:48]\allowbreak{}=\allowbreak{}64-bit user-byte count excluding ipad; [\allowbreak{}119:112]\allowbreak{}=\allowbreak{}used bytes; [\allowbreak{}375:120]\allowbreak{}=\allowbreak{}chain; [\allowbreak{}631:376]\allowbreak{}=\allowbreak{}inner seed; [\allowbreak{}887:632]\allowbreak{}=\allowbreak{}outer seed; [\allowbreak{}1399:888]\allowbreak{}=\allowbreak{}512-bit partial buffer; [\allowbreak{}1535:1400]\allowbreak{}=\allowbreak{}zero. H0 is the most-significant state word; the earliest buffer byte occupies [\allowbreak{}511:504]\allowbreak{}. used is 0–63 and equals count modulo 64. Unused bytes must be zero. Counts obey mode limits; HMAC requires a key; absent keys require zero seeds. For count<64,\allowbreak{} chain must equal the SHA IV or HMAC inner seed. Later states and installed seeds remain opaque. RESTORE validates atomically; completed block boundaries export used=\allowbreak{}0 with the block incorporated into chain.
+
+\subsection{Cycle semantics and finalization}
+
+A beat accepted at E is registered after E and drains at most one byte per following edge. Full-block compression pauses draining without losing staged bytes. Work block/\allowbreak{}state registers precede launch L; rounds execute at L+\allowbreak{}1 through L+\allowbreak{}64,\allowbreak{} feed-forward/\allowbreak{}done registers at L+\allowbreak{}65,\allowbreak{} and the controller consumes done at L+\allowbreak{}66. Padding needs one block for residues 0–55 and two for 56–63; exact-block messages require a subsequent padding block. HMAC outer processing hashes the inner digest from the installed outer seed. SAVE registers its image after acceptance; RESTORE commits or faults after acceptance. Resumed input and next-message traffic cannot transfer on the corresponding retirement/\allowbreak{}restore edge.
+
+\subsection{Reset and cancellation}
+
+Asynchronous reset cancels work and outputs and selects fresh SHA. CANCEL is ready whenever reset is high,\allowbreak{} including compression,\allowbreak{} key loading,\allowbreak{} FAULT and stalled outputs; its accepted edge overrides completion and retirement,\allowbreak{} clears keys and pending state,\allowbreak{} and prevents stale results from reappearing. Neither operation establishes physical secure erasure.
+
+\section{Verification methods and measured results}
+
+\subsection{Independent numerical expectations}
+
+\textbf{Method.} Public-interface scoreboards use Python hashlib.sha256 and hmac. A separate compression/\allowbreak{}state model supports context and synthetic near-limit expectations.
+
+\textbf{Result.} The state model was cross-checked on 44 complete SHA messages and 132 HMAC-state cases before use. Active-output X/\allowbreak{}Z and stall-stability assertions supplement digest comparisons. Recorded tools include Python 3.12.3,\allowbreak{} Icarus 12.0 and Verilator 5.020.
+
+{\small Evidence: E018,\allowbreak{} E020,\allowbreak{} E021,\allowbreak{} E026}
+
+\subsection{Full seeded behavior and context isolation}
+
+\textbf{Method.} Icarus executed seeds 17,\allowbreak{} 89 and 2027 for each legal parameter,\allowbreak{} requiring at least 100 SHA,\allowbreak{} 100 HMAC and 100 four-context switches per cell.
+
+\textbf{Result.} Each default cell completed 414 SHA,\allowbreak{} 751 HMAC and 364 restores; each extended cell completed 410 SHA,\allowbreak{} 752 HMAC and 364 restores. Default cycle totals by seed were 444,\allowbreak{}019,\allowbreak{} 440,\allowbreak{}887 and 441,\allowbreak{}243; extended totals were 485,\allowbreak{}567,\allowbreak{} 487,\allowbreak{}249 and 485,\allowbreak{}493. The matrix totaled 6,\allowbreak{}981 comparisons across 2,\allowbreak{}784,\allowbreak{}458 cycles,\allowbreak{} with zero digest bit mismatches. Per-cell ledgers are retained under evidence/\allowbreak{}behavior/\allowbreak{}p\{0,\allowbreak{}1\}-seed\{17,\allowbreak{}89,\allowbreak{}2027\}/\allowbreak{}measurements.json.
+
+{\small Evidence: E026}
+
+\subsection{Boundary,\allowbreak{} ownership and recovery coverage}
+
+\textbf{Method.} Directed scenarios exercised RFC vectors,\allowbreak{} message/\allowbreak{}key boundaries,\allowbreak{} every extended partial residue,\allowbreak{} default reachable residues and imported arbitrary residues,\allowbreak{} malformed images,\allowbreak{} near-limit padding/\allowbreak{}overflow,\allowbreak{} arbitration,\allowbreak{} 100-cycle output stalls and phase-specific reset/\allowbreak{}CANCEL.
+
+\textbf{Result.} All executed assertions passed. Coverage includes four independently tracked SHA/\allowbreak{}HMAC owners,\allowbreak{} distinct and long keys,\allowbreak{} repeated SAVE,\allowbreak{} restoration after unrelated key changes,\allowbreak{} and snapshot backpressure during padding/\allowbreak{}compression. Both configurations completed all seven RFC 4231 cases,\allowbreak{} including the case-5 prefix check,\allowbreak{} standard SHA vectors and separate million-a runs.
+
+{\small Evidence: E016,\allowbreak{} E020,\allowbreak{} E026}
+
+\subsection{Second-simulator behavior and fixed compressor timing}
+
+\textbf{Method.} Verilator --binary subsets exercised both parameters; a separate compressor fixture checked timing,\allowbreak{} arithmetic and cancellation.
+
+\textbf{Result.} Each Verilator configuration compared 30 SHA and 121 HMAC messages with zero mismatches: 54,\allowbreak{}524 cycles for default and 57,\allowbreak{}704 for extended mode. The compressor fixture compared 40 blocks and exercised 66 clear offsets,\allowbreak{} confirming feed-forward at L+\allowbreak{}65 and controller consumption at L+\allowbreak{}66. Illegal parameters -1 and 2 were rejected.
+
+{\small Evidence: E017,\allowbreak{} E026}
+
+\subsection{Measured latency and workload throughput}
+
+\textbf{Method.} Cycle ledgers separate last-beat-to-valid latency from complete non-resumed message spans and aggregate workload throughput.
+
+\textbf{Result.} Matrix last-beat-to-valid latency was 70–209 cycles. Whole-message spans were 71–2,\allowbreak{}572 cycles for default and 71–2,\allowbreak{}865 for extended mode; resumed-context spans are excluded from these whole-message ranges. Workload throughput was 0.002624–0.002642 compared messages/\allowbreak{}cycle for default and 0.002385–0.002393 for extended mode,\allowbreak{} including commands,\allowbreak{} stalls and resets. Million-a required 2,\allowbreak{}328,\allowbreak{}194 whole-message cycles in each configuration,\allowbreak{} within 2,\allowbreak{}328,\allowbreak{}199 total test cycles per run.
+
+{\small Evidence: E026}
+
+\subsection{H1 compatibility}
+
+\textbf{Method.} Immutable H1 and default H2 were separately simulated against independent SHA expectations,\allowbreak{} including mask/\allowbreak{}error/\allowbreak{}reset/\allowbreak{}stall traffic.
+
+\textbf{Result.} 164 paired valid messages passed with zero digest mismatches. H1 used 63,\allowbreak{}999 cycles and H2 84,\allowbreak{}777 cycles for these workloads. Compatibility is functional and protocol-based,\allowbreak{} not cycle-equivalent.
+
+{\small Evidence: E027}
+
+\subsection{Executed defect sensitivity}
+
+\textbf{Method.} Six disposable RTL mutations each compiled and ran against a passing original-source witness.
+
+\textbf{Result.} All six caused identified digest assertion failures: corrupted SHA arithmetic,\allowbreak{} wrong ipad/\allowbreak{}opad,\allowbreak{} bypassed long-key hashing,\allowbreak{} lost restored partial bytes,\allowbreak{} wrong restored length and wrong restored outer seed. The SHA witness used default-mode abc; the outer-seed witness failed the second interleaved-context result. Compilation failure and timeout were not counted as detections. Patches and witnesses remain under evidence/\allowbreak{}defects.
+
+{\small Evidence: E028}
+
+\subsection{Synthesizable structure and implementation size}
+
+\textbf{Method.} Yosys 0.33 performed hierarchy checking,\allowbreak{} process lowering,\allowbreak{} optimization,\allowbreak{} synthesis and check -assert for both parameters; JSON inspection checked required instances,\allowbreak{} storage,\allowbreak{} arithmetic and driven outputs.
+
+\textbf{Result.} Both retained six modules and 5,\allowbreak{}768 state bits,\allowbreak{} with zero latches,\allowbreak{} black boxes or undriven public outputs and no reported combinational loops. Post-synthesis instance totals were 41,\allowbreak{}400 for default and 41,\allowbreak{}399 for extended mode,\allowbreak{} including five hierarchical instances. H2 source totals are 796 lines and 32,\allowbreak{}102 bytes: top 380/\allowbreak{}16,\allowbreak{}178; compressor 169/\allowbreak{}7,\allowbreak{}015; stream 81/\allowbreak{}2,\allowbreak{}740; HMAC 66/\allowbreak{}2,\allowbreak{}297; context 61/\allowbreak{}2,\allowbreak{}396; schedule 39/\allowbreak{}1,\allowbreak{}476,\allowbreak{} expressed as lines/\allowbreak{}bytes.
+
+{\small Evidence: E008,\allowbreak{} E009,\allowbreak{} E010,\allowbreak{} E011,\allowbreak{} E012,\allowbreak{} E013,\allowbreak{} E029}
+
+\subsection{Portable reproduction and validation integrity}
+
+\textbf{Method.} A fresh source-only project-local copy executed a bounded functional subset and default synthesis. Validation repairs corrected transactor observation scheduling and robust handling of absent Yosys naming attributes without changing production RTL.
+
+\textbf{Result.} Clean reproduction compared three SHA and two HMAC messages in 1,\allowbreak{}786 cycles with zero mismatches,\allowbreak{} two snapshots,\allowbreak{} one restore and eight cancellations. It covered empty/\allowbreak{}long keys,\allowbreak{} partial-context continuation and stalled output,\allowbreak{} then passed default synthesis. Earlier preparation failures remain retained; the full matrix is separate from this bounded reproduction.
+
+{\small Evidence: E025,\allowbreak{} E026,\allowbreak{} E029,\allowbreak{} E030}
+
+\section{Integration and use}
+
+Instantiate rivet\_\allowbreak{}h2\_\allowbreak{}top from the six rtl/\allowbreak{}*\allowbreak{}.sv files. Use design/\allowbreak{}SPEC.md for the public contract and design/\allowbreak{}ARCHITECTURE.md for internal boundaries and timing. The reference RTL remains unchanged and is not required in the H2 hardware instance.
+
+
+Assert rst\_\allowbreak{}n low before traffic. SHA is selected after reset. Hold each offered payload stable until handshake. For HMAC,\allowbreak{} accept KEY\_\allowbreak{}LOAD,\allowbreak{} stream the complete key through k\_\allowbreak{}last,\allowbreak{} wait for ordinary command readiness,\allowbreak{} accept HMAC\_\allowbreak{}INIT,\allowbreak{} then send message data. Retire each digest before starting the next message.
+
+
+For interleaving,\allowbreak{} SAVE a quiescent prefix before offering its final beat,\allowbreak{} retain the complete 192-byte image in trusted software storage,\allowbreak{} and RESTORE it when continuation is required. Restore replaces mode and installed-key ownership together. Use CANCEL,\allowbreak{} not a busy initialization request,\allowbreak{} to abandon in-flight work.
+
+
+Run from the project root with Python 3,\allowbreak{} iverilog/\allowbreak{}vvp,\allowbreak{} Verilator,\allowbreak{} make,\allowbreak{} g+\allowbreak{}+\allowbreak{} and Yosys available. Full behavior command: python3 tests/\allowbreak{}verify.py --check behavior --output evidence/\allowbreak{}behavior. Compatibility command: python3 tests/\allowbreak{}verify.py --check compatibility --output evidence/\allowbreak{}compatibility.
+
+
+Defect command: python3 tests/\allowbreak{}verify.py --check defects --output evidence/\allowbreak{}defects. Synthesis command: python3 tests/\allowbreak{}verify.py --check synthesis --output evidence/\allowbreak{}synthesis. Clean-directory reproduction command: python3 tests/\allowbreak{}verify.py --check portable --output evidence/\allowbreak{}portable.
+
+
+Choose a new project-relative output directory when a documented destination already exists; checks deliberately refuse overwrite. Receipts retain source hashes,\allowbreak{} tool versions,\allowbreak{} exact arguments,\allowbreak{} raw outputs and measurement ledgers. Child tool deadlines are 3,\allowbreak{}600 seconds; cycle watchdogs separately bound simulated workloads.
+
+
+\section{Limitations and acceptance boundary}
+
+There is one active hardware context,\allowbreak{} no automatic scheduler,\allowbreak{} no context-ID ports and no parallel message datapaths. Software owns scheduling and context storage.
+
+
+Context images expose sensitive key-derived states and are neither encrypted nor authenticated. Structural validation is not a security boundary; trusted software must control images and key ownership.
+
+
+Simulation,\allowbreak{} reference comparisons and injected defects provide executable coverage,\allowbreak{} not exhaustive formal proof. Near-limit imported states exercise padding and overflow without streaming infeasible message lengths.
+
+
+Throughput figures describe the recorded mixed verification workloads,\allowbreak{} not peak sustained byte throughput. Generic cell counts are not technology area; no clock-frequency,\allowbreak{} timing-closure,\allowbreak{} power,\allowbreak{} FPGA,\allowbreak{} physical secure-erasure or silicon-security measurements are claimed.
+
+
+Portable reproduction was executed for the documented bounded subset and default synthesis,\allowbreak{} not the full matrix. External tool availability remains an integration prerequisite; no hidden runtime metadata is required by the declared source-only reproduction.
+
+
+\appendix\section{Source inventory}
+
+Production inventory: 11 Verilog/\allowbreak{}SystemVerilog files; 1169 nonblank,\allowbreak{} non-comment lines. Source size is not a correctness or quality metric.
+
+{\small\begin{longtable}{@{}L{0.61\textwidth}L{0.15\textwidth}L{0.15\textwidth}@{}}\toprule
+
+\textbf{Producti\allowbreak{}on file} & \textbf{Physical lines} & \textbf{Code lines}\\\midrule\endhead
+
+rivet\_\allowbreak{}h1\_\allowbreak{}referenc\allowbreak{}e/\allowbreak{}rtl/\allowbreak{}rivet\_\allowbreak{}h1\_\allowbreak{}compress.sv & 159 & 155\\[3pt]
+
+rivet\_\allowbreak{}h1\_\allowbreak{}referenc\allowbreak{}e/\allowbreak{}rtl/\allowbreak{}rivet\_\allowbreak{}h1\_\allowbreak{}length.sv & 24 & 23\\[3pt]
+
+rivet\_\allowbreak{}h1\_\allowbreak{}referenc\allowbreak{}e/\allowbreak{}rtl/\allowbreak{}rivet\_\allowbreak{}h1\_\allowbreak{}pad.sv & 61 & 60\\[3pt]
+
+rivet\_\allowbreak{}h1\_\allowbreak{}referenc\allowbreak{}e/\allowbreak{}rtl/\allowbreak{}rivet\_\allowbreak{}h1\_\allowbreak{}schedule.sv & 34 & 33\\[3pt]
+
+rivet\_\allowbreak{}h1\_\allowbreak{}referenc\allowbreak{}e/\allowbreak{}rtl/\allowbreak{}rivet\_\allowbreak{}h1\_\allowbreak{}top.sv & 131 & 127\\[3pt]
+
+rtl/\allowbreak{}rivet\_\allowbreak{}h2\_\allowbreak{}compress.sv & 169 & 164\\[3pt]
+
+rtl/\allowbreak{}rivet\_\allowbreak{}h2\_\allowbreak{}context.sv & 61 & 59\\[3pt]
+
+rtl/\allowbreak{}rivet\_\allowbreak{}h2\_\allowbreak{}hmac.sv & 66 & 64\\[3pt]
+
+rtl/\allowbreak{}rivet\_\allowbreak{}h2\_\allowbreak{}schedule.sv & 39 & 37\\[3pt]
+
+rtl/\allowbreak{}rivet\_\allowbreak{}h2\_\allowbreak{}stream.sv & 81 & 79\\[3pt]
+
+rtl/\allowbreak{}rivet\_\allowbreak{}h2\_\allowbreak{}top.sv & 380 & 368\\[3pt]
+
+\bottomrule\end{longtable}}
+
+\section{Verification record index}
+
+{\small\begin{longtable}{@{}L{0.57\textwidth}L{0.16\textwidth}L{0.17\textwidth}@{}}\toprule
+
+\textbf{Recorded check} & \textbf{Outcome} & \textbf{Executio\allowbreak{}n time (\allowbreak{}s)\allowbreak{}}\\\midrule\endhead
+
+behavior & passed & 429.590\\[3pt]
+
+compatib\allowbreak{}ility & passed & 9.201\\[3pt]
+
+defect\_\allowbreak{}sensitiv\allowbreak{}ity & passed & 2.842\\[3pt]
+
+synthesi\allowbreak{}s & passed & 89.027\\[3pt]
+
+portable\_\allowbreak{}reproduc\allowbreak{}tion & passed & 45.668\\[3pt]
+
+\bottomrule\end{longtable}}
+
+Execution times include tool and provider waiting; they are not hardware latency or model utilization.
+
+{\small\begin{longtable}{@{}L{0.12\textwidth}L{0.82\textwidth}@{}}\toprule
+
+\textbf{Referenc\allowbreak{}e} & \textbf{Original project-relative record}\\\midrule\endhead
+
+E008 & rtl/\allowbreak{}rivet\_\allowbreak{}h2\_\allowbreak{}compress.sv\\[3pt]
+
+E009 & rtl/\allowbreak{}rivet\_\allowbreak{}h2\_\allowbreak{}context.sv\\[3pt]
+
+E010 & rtl/\allowbreak{}rivet\_\allowbreak{}h2\_\allowbreak{}hmac.sv\\[3pt]
+
+E011 & rtl/\allowbreak{}rivet\_\allowbreak{}h2\_\allowbreak{}schedule.sv\\[3pt]
+
+E012 & rtl/\allowbreak{}rivet\_\allowbreak{}h2\_\allowbreak{}stream.sv\\[3pt]
+
+E013 & rtl/\allowbreak{}rivet\_\allowbreak{}h2\_\allowbreak{}top.sv\\[3pt]
+
+E016 & tests/\allowbreak{}bridge.sv\\[3pt]
+
+E017 & tests/\allowbreak{}compress\_\allowbreak{}tb.sv\\[3pt]
+
+E018 & tests/\allowbreak{}model.py\\[3pt]
+
+E020 & tests/\allowbreak{}scenario\allowbreak{}s.py\\[3pt]
+
+E021 & tests/\allowbreak{}verify.py\\[3pt]
+
+E025 & .vulcan/\allowbreak{}engineer\allowbreak{}ing/\allowbreak{}run-0001/\allowbreak{}attempt-0002/\allowbreak{}response.json\\[3pt]
+
+E026 & .vulcan/\allowbreak{}engineer\allowbreak{}ing/\allowbreak{}run-0001/\allowbreak{}attempt-0003/\allowbreak{}stdout.log\\[3pt]
+
+E027 & .vulcan/\allowbreak{}engineer\allowbreak{}ing/\allowbreak{}run-0001/\allowbreak{}attempt-0004/\allowbreak{}stdout.log\\[3pt]
+
+E028 & .vulcan/\allowbreak{}engineer\allowbreak{}ing/\allowbreak{}run-0001/\allowbreak{}attempt-0005/\allowbreak{}stdout.log\\[3pt]
+
+E029 & .vulcan/\allowbreak{}engineer\allowbreak{}ing/\allowbreak{}run-0001/\allowbreak{}attempt-0006/\allowbreak{}stdout.log\\[3pt]
+
+E030 & .vulcan/\allowbreak{}engineer\allowbreak{}ing/\allowbreak{}run-0001/\allowbreak{}attempt-0007/\allowbreak{}stdout.log\\[3pt]
+
+\bottomrule\end{longtable}}
+
+\section{Document provenance}
+
+Engineering was independently accepted for the recorded source and evidence identity. This is not exhaustive proof, hardware deployment or physical signoff. The companion REPORT.md records the exact report approval and source manifest, and links the English/Chinese journeys containing original failures and interventions. A report number identifies a generation attempt, not a new hardware revision.
+
+No developer attribution was supplied; none has been inferred.
+
+\end{document}

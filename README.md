@@ -14,7 +14,7 @@ This repository publishes selected open engineering deliverables produced with V
 | Generation | Design | Scope | Engineering status | Product report |
 |---|---|---|---|---|
 | 1 | [RIVET-H1](rivet-h1/) | SHA-256 streaming hash, message length, padding and digest output | Engineering accepted | [PDF](rivet-h1/REPORT.pdf) |
-| 2 | [RIVET-H2](rivet-h2/) | HMAC-SHA-256 and context save/restore | Engineering accepted | Pending |
+| 2 | [RIVET-H2](rivet-h2/) | HMAC-SHA-256 and context save/restore | Engineering accepted | [PDF](rivet-h2/REPORT.pdf) |
 | 3 | [RIVET-H3](rivet-h3/) | SHA-512 and multichannel hash/message authentication | Not accepted (planned) | Pending |
 
 Accepted sources are published separately from in-progress status. Each generation keeps its own specification, RTL, executable verification and report. Planned generations are not completed products.

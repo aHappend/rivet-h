@@ -24,6 +24,8 @@
   "rivet-h1/tests/model.py",
   "rivet-h1/tests/verify.py",
   "rivet-h2/README.md",
+  "rivet-h2/REPORT.pdf",
+  "rivet-h2/REPORT.tex",
   "rivet-h2/STATUS.json",
   "rivet-h2/design/ARCHITECTURE.md",
   "rivet-h2/design/SPEC.md",
