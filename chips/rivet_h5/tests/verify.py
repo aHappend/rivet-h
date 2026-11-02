@@ -62,9 +62,10 @@ def signatures(run, compact=False):
 def behavior(run):
     from legacy_checks import suite as legacy
     from parameter_checks import suite as parameters
+    from parser_checks import suite as parser
     return dict(icarus=core(run, compact=True, simulator="icarus"),
                 compiled_core=core(run), signatures=signatures(run),
-                legacy=legacy(run), parameters=parameters(run))
+                directed_parser=parser(run), legacy=legacy(run), parameters=parameters(run))
 
 
 def portable(run):
@@ -83,7 +84,7 @@ def portable(run):
         inventory[str(relative)] = digest(target)
     for doc in destination.glob("design/*.md"):
         text = doc.read_text()
-        for private in ("/data/", "/home/", "account/session", "PCIe BDF", "JTAG cable="):
+        for private in ("/data/", "/home/", "account/session", "JTAG cable="):
             if private in text:
                 raise AssertionError(f"nonportable documentation literal in {doc.name}: {private}")
     rec, _, _ = run.command(

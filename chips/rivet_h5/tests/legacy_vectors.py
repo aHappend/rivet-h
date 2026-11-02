@@ -43,6 +43,34 @@ def generate(path, partial, page, compact=False, seeds=(17, 29, 43)):
         for seed in seeds[:1] if compact else seeds:
             rng = random.Random(seed)
             record(0)
+            if not compact:
+                record(20); counts["concurrency_runs"] += 1
+                # Legacy inputs transfer while all three new services own work.
+                messages = [rng.randbytes(65) for _ in range(4)]
+                for ch in range(4):
+                    command(ch, 6 if ch&1 else 0)
+                    expected(ch, 2 if ch&1 else 0, messages[ch], queued=True)
+                streams = [beats(msg, bool(partial)) for msg in messages]
+                for index in range(max(map(len,streams))):
+                    for ch, words in enumerate(streams):
+                        if index<len(words):
+                            data,keep,last = words[index]
+                            record(2,ch,0,f"{data:08x}",keep,last)
+                record(19)
+                # Sponge and page authentication coexist with full signature work.
+                msg = rng.randbytes(137)
+                output = hashlib.shake_256(msg).digest(409)
+                record(4,3,len(output))
+                for data,keep,last in beats(msg,bool(partial)): record(5,f"{data:08x}",keep,last)
+                for data,keep,last in beats(output): record(6,f"{data:08x}",keep,last)
+                counts["sponge_bytes"] += len(output)
+                msg = rng.randbytes(min(page,5)); root = hashlib.sha256(b"\0"+msg).digest()
+                record(7,root.hex()); record(8,len(msg),0,"0")
+                for data,keep,last in beats(msg): record(9,f"{data:08x}",keep,last)
+                record(11,1,0); counts["merkle_results"] += 1
+                for data,keep,last in beats(msg): record(12,f"{data:08x}",keep,last)
+                counts["replay_bytes"] += len(msg)
+                record(21)
             lengths = (0, 1, 65) if compact else (
                 0, 1, 3, 4, 55, 56, 63, 64, 65, 111, 112, 127, 128, 129, 257, 4096)
             # Four channels have live transactions together and interleaved data.

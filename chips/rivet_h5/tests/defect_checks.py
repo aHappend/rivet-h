@@ -147,7 +147,7 @@ def legacy_mutation(run):
     try:
         rec,out,err = run.command([*argv,"+vectors="+str(path)],"mutated-legacy-digest",
                                   expect_failure=True)
-        diagnostic = "parent interface mismatch: m_digest"
+        diagnostic = "interleaved legacy digest ch="
         if rec["exit_status"]==0 or rec["timed_out"] or diagnostic not in out+err:
             raise AssertionError("legacy public-pin oracle did not detect disposable digest defect")
         return dict(name="legacy-digest",original_sha256=original,mutated_sha256=digest(source),

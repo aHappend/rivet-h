@@ -2,7 +2,7 @@
 
 import re
 import secrets
-import shutil
+import json
 
 from execution import digest
 from legacy_vectors import generate
@@ -95,13 +95,15 @@ def build(run, partial=0, page=4096, simulator="verilator", source_root=None):
     if simulator == "icarus":
         binary = directory / "legacy.vvp"
         argv = ["iverilog", "-g2012", "-Wall", "-s", "legacy_tb", "-I", str(directory),
+                "-I", str(run.root/"tests"),
                 f"-Plegacy_tb.PARTIAL_BEATS={partial}", f"-Plegacy_tb.MAX_PAGE_BYTES={page}",
                 "-o", str(binary), *sources]
         run.command(argv, "compile-legacy-icarus")
         return ["vvp", str(binary)], None, ledger
     obj = directory / ("compile-obj-" + secrets.token_hex(4))
     argv = ["verilator", "--binary", "--timing", "-Wno-fatal", "--top-module", "legacy_tb",
-            "-I" + str(directory), f"-GPARTIAL_BEATS={partial}", f"-GMAX_PAGE_BYTES={page}",
+            "-I" + str(directory), "-I"+str(run.root/"tests"),
+            f"-GPARTIAL_BEATS={partial}", f"-GMAX_PAGE_BYTES={page}",
             "--Mdir", str(obj), "-j", "2", *sources]
     run.command(argv, "compile-legacy-verilator")
     return [str(obj / "Vlegacy_tb")], obj, ledger
@@ -120,11 +122,43 @@ def check_counts(stdout, inventory):
             raise AssertionError(f"legacy observed {name}: {observed[name]} != {inventory.get(name, 0)}")
     if observed["stalls"] <= 0 or observed["differential_samples"] < 2 * observed["clocks"] - 4:
         raise AssertionError("legacy stalls/dual-edge parent comparison not exercised")
+    concurrent = re.findall(r"CONCURRENCY runs=(\d+) ntt_coefficients=(\d+) sampler_coefficients=(\d+) signature_results=(\d+) legacy_transfers=(\d+)",stdout)
+    if len(concurrent)!=1:
+        raise AssertionError("missing integration comparison summary")
+    values = tuple(map(int,concurrent[0]))
+    if values[0] != inventory.get("concurrency_runs",0):
+        raise AssertionError("missing expected integration execution")
+    if values[0] and (values[1:4]!=(256*values[0],256*values[0],2*values[0]) or values[4]<=0):
+        raise AssertionError("incomplete observed integration comparisons")
+    observed["concurrency"] = dict(zip(("runs","ntt_coefficients","sampler_coefficients",
+                                        "signature_results","legacy_transfers"),values))
     return observed
+
+
+def concurrency_fixture(run):
+    from reference import sample
+    from mldsa_reference import verify
+    fixture = json.loads((run.root/"tests/acvp_sigver.json").read_text())
+    group = next(g for g in fixture["testGroups"] if g["parameterSet"]=="ML-DSA-44")
+    case = next(t for t in group["tests"] if t["testPassed"])
+    pk,sig,ctx,msg = (bytes.fromhex(case[key]) for key in ("pk","signature","context","message"))
+    if not verify(pk,sig,msg,ctx,0)["auth"]:
+        raise AssertionError("public concurrent signature failed independent oracle")
+    seed = bytes(range(64)); nonce = 0x0102
+    coefficients = sample(0,0,seed,nonce)
+    path = run.path/("concurrent-vectors-"+secrets.token_hex(4)+".txt")
+    with path.open("x") as f:
+        f.write(f"0 0 {int.from_bytes(seed,'little'):0128x} {nonce:x}\n")
+        f.write(" ".join(f"{x:x}" for x in coefficients)+"\n")
+        f.write(f"0 {len(pk)} {len(sig)} {len(ctx)} {len(msg)}\n")
+        for data in (pk,sig,ctx,msg):
+            f.write(" ".join(f"{x:x}" for x in data)+"\n")
+    return path
 
 
 def suite(run, compact=False):
     results = []
+    concurrent = concurrency_fixture(run)
     configs = [(0, 3), (1, 3)] if compact else [
         (partial, page) for partial in (0, 1) for page in (1, 3, 4, 5, 4095, 4096)]
     for partial, page in configs:
@@ -132,7 +166,7 @@ def suite(run, compact=False):
         inventory = generate(path, partial, page, compact=compact)
         argv, obj, ledger = build(run, partial, page)
         try:
-            rec, out, _ = run.command([*argv, "+vectors=" + str(path)],
+            rec, out, _ = run.command([*argv, "+vectors=" + str(path), "+concurrent="+str(concurrent)],
                                      f"legacy-p{partial}-page{page}")
             results.append(dict(partial_beats=partial, max_page_bytes=page, inventory=inventory,
                                 observed=check_counts(out, inventory), parent_copy=ledger,

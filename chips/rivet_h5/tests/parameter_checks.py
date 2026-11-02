@@ -5,7 +5,7 @@ import secrets
 from legacy_checks import wiring
 
 
-def suite(run):
+def diagnostic(run, all_legal=False):
     directory = run.path / ("parameter-build-" + secrets.token_hex(4))
     directory.mkdir()
     wiring(run, directory, parameter_only=True)
@@ -29,13 +29,21 @@ def suite(run):
         if rec["exit_status"] == 0 or "PARAMETER ERROR" not in out + err:
             raise AssertionError(f"illegal tuple {partial}/{page} lacks explicit rejection")
         results.append(dict(partial=partial, page=page, stdout=rec["stdout"], stderr=rec["stderr"]))
+    legal = range(1,4097) if all_legal else (1,3,4,5,4095,4096)
+    timings = []
     for partial in (0, 1):
-        for page in range(1, 4097):
-            run.command(["iverilog", "-g2012", "-Wall", "-tnull", "-s", "parameter_tb",
+        for page in legal:
+            rec,_,_ = run.command(["iverilog", "-g2012", "-Wall", "-tnull", "-s", "parameter_tb",
                          "-I", str(directory), f"-Pparameter_tb.PARTIAL_BEATS={partial}",
                          f"-Pparameter_tb.MAX_PAGE_BYTES={page}", str(bench), *sources],
                         f"elaborate-p{partial}-page{page}")
+            timings.append(rec["duration_seconds"])
             if page % 128 == 0:
                 print(f"legal parameter elaboration p={partial} page={page}/4096", flush=True)
-    return dict(legal_elaborations=8192, illegal_rejections=results,
-                scope="Every PARTIAL_BEATS=0/1 and MAX_PAGE_BYTES=1..4096 full rivet_h5_top")
+    return dict(legal_elaborations=2*len(legal), illegal_rejections=results,
+                elapsed_compiler_seconds=sum(timings),
+                scope="Full rivet_h5_top elaboration", page_values=list(legal))
+
+
+def suite(run):
+    return diagnostic(run, all_legal=True)
