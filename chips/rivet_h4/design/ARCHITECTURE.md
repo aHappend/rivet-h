@@ -14,8 +14,13 @@ Designer-owned inputs: `rtl/*.sv`, `design/*.md`.
 Verifier-owned inputs: flat `tests/*`; immutable comparison fixtures:
 `rivet_h3_reference/rtl/*.sv`. No runtime directories are compilation inputs.
 No initial generational handoff or linked source index was available.
-Parent STA/PPA cannot be compared until the actual handoff is restored through
-authorized project input restoration. Reference RTL is provenance, not H4 evidence.
+`GENERATIONAL_HANDOFF.md` is now restored through authorized project input
+restoration. Its supplied Quartus 17.1 results are post-map setup WNS +4.922 ns
+at 10.0 ns and hold WNS -0.175 ns, not post-fit signoff or clean hold timing.
+The historical `passed` label does not resolve the negative hold slack.
+Parent post-fit timing, Fmax, area and physical HIL remain unavailable; no
+measured parent/H4 timing or PPA improvement is claimed. Reference RTL and the
+historical handoff are provenance, not evidence that H4 passes.
 
 ## Hierarchy and isolation
 
@@ -150,6 +155,11 @@ capacities 1 and 3. Invalid configurations use diagnostic-only safe dimensions;
 they still fail explicitly and are not usable clamped configurations.
 Bounds use descriptor count, not address masking. Partial final words may store
 untrusted low bits internally; replay explicitly zeros all unused output bytes.
+The supplied parent handoff recommends byte-lane arrays for large byte-enable
+memories. This page RAM instead writes complete 32-bit words; it has no byte-enable
+write ports. Its M20K hint is not proof of hard-memory mapping, and the handoff's
+<45-second inference expectation is not an H4 acceptance threshold. Actual
+native Quartus mapping remains mandatory.
 
 After leaf digest acceptance, depth zero proceeds directly to comparison.
 Otherwise PROOF accepts a sibling only after page hashing is complete.
@@ -218,9 +228,15 @@ and reproduce compact legacy/sponge/Merkle checks in a clean temporary copy.
 It must not require original build products, private paths or runtime transcripts.
 
 Designer runs no behavior/synthesis harness. Static parse success is not a
-cryptographic, protocol, memory-inference or timing verdict. Native runtime gates
+cryptographic, protocol, memory-inference or timing verdict. Existing independent
+Icarus/Verilator preparation comparisons, six intended mutant rejections and two
+zero-latch Yosys configurations are advisory only; complete L1 and clean-copy
+reproduction remain pending against fresh, stable source bindings.
+The Coordinator reports current-source native timing lint passed; no actual-H4
+Quartus STA or board-HIL receipt is available at this handoff. Native runtime gates
 are L1.5 timing lint, L2 Quartus 17.1 STA and L3 Arria 10 GX PCIe Gen3x8 hardware
-bridge, including three deterministic consecutive board passes. They remain
-pending until actually executed; portable L1 neither hardcodes hardware locations
+bridge, including three deterministic consecutive board passes. STA, memory
+mapping and physical-board acceptance remain pending until actually executed;
+portable L1 neither hardcodes hardware locations
 nor substitutes generic synthesis for STA/HIL. Product PDF generation/review
 follows engineering acceptance and is not an input prerequisite.

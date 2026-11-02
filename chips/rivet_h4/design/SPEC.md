@@ -11,9 +11,13 @@ ownership, after independent functional verification.
 
 The supplied eleven `rivet_h3_reference/rtl/*.sv` files are immutable provenance.
 The delivered hierarchy is self-contained in `rtl/`. No linked intake source
-index or `design/GENERATIONAL_HANDOFF.md` was supplied. Historical parent STA/PPA
-is therefore unavailable; no parent timing comparison is asserted. Authorized
-restoration of that handoff remains an integration input, not a fabricated result.
+index was supplied. `design/GENERATIONAL_HANDOFF.md` was absent during initial
+planning and is now restored as a supplied historical input. It reports Quartus
+17.1 post-map setup WNS +4.922 ns at 10.0 ns and hold WNS -0.175 ns.
+This is not post-fit signoff: negative hold slack is a violation despite the
+reported historical `passed` label. Parent post-fit timing, Fmax, area and HIL
+are unavailable. No measured parent/H4 timing or PPA comparison is asserted;
+the parent handoff neither certifies H4 nor changes its acceptance requirements.
 
 ## Common rules and legal parameters
 
@@ -194,6 +198,14 @@ divider/remainder cells, substantive connected state in all branches, retained R
 inference, illegal-parameter diagnostics and clean-directory smoke reproduction.
 Retain unique source-bound receipts, failed runs, raw logs and repair links.
 Missing subordinate artifacts must trigger their generators.
+
+Existing Icarus/Verilator preparation comparisons, six intended mutant
+rejections and two zero-latch Yosys configurations are advisory results only.
+Complete L1 and clean-directory reproduction remain pending and must execute
+against fresh, stable source bindings after this documentation repair.
+The Coordinator reports current-source native timing lint passed; that does
+not establish Quartus timing, memory mapping or physical operation. No actual-H4
+Quartus STA or board-HIL receipt is available at this handoff.
 
 The shared runtime executes L1.5 timing lint, L2 Quartus 17.1 actual-H4 STA
 (at most 10.0 ns constraint, nonnegative setup slack and clean hold/constraints)
