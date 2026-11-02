@@ -14,29 +14,33 @@ from simulation import cleanup_objects
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("probe", choices=("legacy", "legacy-extended", "full-top-synthesis", "mutation",
+    parser.add_argument("probe", choices=("legacy", "legacy-extended", "legacy-boundary", "full-top-synthesis", "mutation",
                                         "signature-boundaries", "parser", "protocol", "parameters-smoke",
                                         "portable"))
     parser.add_argument("--mutation")
     parser.add_argument("--repair-of")
+    parser.add_argument("--partial",type=int,choices=(0,1),default=1)
+    parser.add_argument("--page",type=int,default=3)
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
     run = Run(root, args.probe, preparation=True, repair_of=args.repair_of)
     details = {}
     obj = None
     try:
-        if args.probe in ("legacy", "legacy-extended"):
+        if args.probe in ("legacy", "legacy-extended", "legacy-boundary"):
             from legacy_checks import build, check_counts, concurrency_fixture
             from legacy_vectors import generate
             vectors = run.path / ("legacy-vectors-" + secrets.token_hex(4) + ".txt")
             extended = args.probe == "legacy-extended"
-            inventory = generate(vectors, 1, 3, compact=not extended, seeds=(17,))
-            run.tool_version("verilator" if extended else "iverilog", "--version" if extended else "-V")
-            argv, obj, ledger = build(run, 1, 3, "verilator" if extended else "icarus")
+            compiled = args.probe != "legacy"
+            inventory = generate(vectors,args.partial,args.page,compact=not extended,seeds=(17,),
+                                 storage_boundary=args.probe=="legacy-boundary")
+            run.tool_version("verilator" if compiled else "iverilog", "--version" if compiled else "-V")
+            argv, obj, ledger = build(run,args.partial,args.page,"verilator" if compiled else "icarus")
             concurrent = concurrency_fixture(run) if extended else None
             extra = ["+concurrent="+str(concurrent)] if extended else []
             rec, stdout, _ = run.command([*argv, "+vectors=" + str(vectors), *extra], "legacy-smoke",
-                                         timeout=2700 if extended else 600)
+                                         timeout=2700 if compiled else 600)
             details.update(inventory=inventory, parent_copy=ledger,
                            observed=check_counts(stdout, inventory),
                            stdout=rec["stdout"], stderr=rec["stderr"])

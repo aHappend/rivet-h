@@ -20,7 +20,7 @@ def beats(data, partial=False, terminate=True):
     return result
 
 
-def generate(path, partial, page, compact=False, seeds=(17, 29, 43)):
+def generate(path, partial, page, compact=False, seeds=(17, 29, 43), storage_boundary=False):
     counts = Counter()
     with path.open("x", encoding="ascii") as f:
         def record(op, *args):
@@ -157,7 +157,7 @@ def generate(path, partial, page, compact=False, seeds=(17, 29, 43)):
                     record(5, "01020304", 5, 1); record(23); counts["errors"] += 1
                     record(22)
             for depth in (0, 1) if compact else (0, 1, 2, 31, 32):
-                message = rng.randbytes(min(page, 3) if compact else page)
+                message = rng.randbytes(page if storage_boundary or not compact else min(page,3))
                 siblings = [rng.randbytes(32) for _ in range(depth)]
                 index = rng.getrandbits(depth)
                 root = hashlib.sha256(b"\0" + message).digest()
@@ -208,4 +208,5 @@ def generate(path, partial, page, compact=False, seeds=(17, 29, 43)):
                                 if last: break
                             record(11,0,1); counts["merkle_results"] += 1
         record(0)
+    counts["storage_boundary"] = int(storage_boundary)
     return dict(counts)

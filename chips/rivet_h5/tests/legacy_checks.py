@@ -170,12 +170,17 @@ def suite(run, compact=False):
         (partial, page) for partial in (0, 1) for page in (1, 3, 4, 5, 4095, 4096)]
     for partial, page in configs:
         path = run.path / (f"legacy-p{partial}-page{page}-" + secrets.token_hex(4) + ".txt")
-        inventory = generate(path, partial, page, compact=compact)
+        full_matrix = not compact and page == 4096
+        inventory = generate(path, partial, page, compact=not full_matrix,
+                             storage_boundary=not compact and not full_matrix)
         argv, obj, ledger = build(run, partial, page)
         try:
             rec, out, _ = run.command([*argv, "+vectors=" + str(path), "+concurrent="+str(concurrent)],
                                      f"legacy-p{partial}-page{page}")
-            results.append(dict(partial_beats=partial, max_page_bytes=page, inventory=inventory,
+            results.append(dict(partial_beats=partial, max_page_bytes=page,
+                                scope="three-seed full legacy matrix" if full_matrix else
+                                      "full-capacity storage boundary" if not compact else "portable compact smoke",
+                                inventory=inventory,
                                 observed=check_counts(out, inventory), parent_copy=ledger,
                                 stdout=rec["stdout"], stderr=rec["stderr"]))
         finally:
