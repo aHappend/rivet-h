@@ -109,9 +109,12 @@ def generate(path, compact=False, seeds=(17, 29, 43)):
             record(8)
         record(6,0,1,1,"0")
         coverage["comparisons"] += 1
-        record(6,0,256,1,hexes([0]*256))
-        # Kind 6 asserts last only at the supplied final index; a length of 256
-        # is normally legal, so inject noncanonical input rather than false framing.
-        # The preceding 256-zero record is omitted by selecting an explicit
-        # noncanonical framing-correct descriptor below in the caller's fixtures.
+        record(6,0,256,2,hexes([0]*255+[Q]))
+        coverage["comparisons"] += 1
+        for op in range(5,8):
+            record(7,op,0,"0","0",1)
+            coverage["comparisons"] += 1
+        for op in range(5):
+            record(7,op,3,"0","0",1)
+            coverage["comparisons"] += 1
     return dict(coverage), dict(sampler_events)
