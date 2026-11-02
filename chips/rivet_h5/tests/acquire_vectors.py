@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.dont_write_bytecode = True
 from execution import Run, digest
 
 

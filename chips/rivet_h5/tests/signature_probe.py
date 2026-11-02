@@ -7,6 +7,7 @@ import re
 import sys
 
 sys.path.insert(0,str(Path(__file__).resolve().parent))
+sys.dont_write_bytecode = True
 from execution import Run
 from signature_vectors import generate
 from simulation import build,simulate,cleanup_objects

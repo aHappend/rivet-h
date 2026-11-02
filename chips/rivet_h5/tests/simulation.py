@@ -19,7 +19,7 @@ def instrument_signature(root, directory):
                         "output wire pq_key_locked,\n    output wire [511:0] verification_challenge\n")
     text = text.replace(register_marker,register_marker+
                         "\n    assign verification_challenge = reconstructed_challenge;")
-    out = directory/"rivet_h5_verify_observed.sv"
+    out = directory/("rivet_h5_verify_observed-"+secrets.token_hex(4)+".sv")
     with out.open("x") as f:
         f.write(text)
     return out, dict(production_sha256=digest(source),simulation_sha256=digest(out),
@@ -59,6 +59,29 @@ def simulate(run,argv,vectors,label,simulator):
     if "SUMMARY " not in out:
         raise AssertionError(f"{label}: missing observed simulation summary")
     return rec,out
+
+
+def check_counts(stdout,inventory,bench):
+    if bench=="core_tb":
+        pattern = r"SUMMARY operations=(\d+) comparisons=(\d+) stalls=(\d+) clocks=(\d+)"
+        names = ("operations","comparisons","stalls","clocks")
+        required = ("operations","comparisons")
+    elif bench=="signature_tb":
+        pattern = r"SUMMARY commands=(\d+) beats=(\d+) results=(\d+) challenge_bytes=(\d+) stalls=(\d+) cancels=(\d+) resets=(\d+) clocks=(\d+)"
+        names = ("commands","beats","results","challenge_bytes","stalls","cancels","resets","clocks")
+        required = names[:-1]
+    else:
+        raise ValueError(f"unknown comparison summary: {bench}")
+    matches = re.findall(pattern,stdout)
+    if len(matches)!=1:
+        raise AssertionError(f"{bench}: absent/duplicate comparison summary")
+    observed = dict(zip(names,map(int,matches[0])))
+    for name in required:
+        if observed[name]!=inventory.get(name,0):
+            raise AssertionError(f"{bench}: observed {name} count disagrees with fixture inventory")
+    if observed["stalls"]<=0 or observed["clocks"]<=0:
+        raise AssertionError(f"{bench}: empty stall/clock observations")
+    return observed
 
 
 def cleanup_objects(obj):

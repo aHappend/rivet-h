@@ -9,6 +9,7 @@ import secrets
 import shutil
 import signal
 import subprocess
+import sys
 import time
 
 
@@ -97,7 +98,7 @@ class Run:
                                    text=(out+err).strip())
 
     def finish(self, exit_status, details):
-        receipt = dict(argv=list(__import__("sys").argv), cwd=str(self.root),
+        receipt = dict(argv=list(sys.orig_argv), cwd=str(Path.cwd()),
                        start=self.start, end=utc(), exit_status=exit_status,
                        source_sha256=self.sources, source_snapshot=self.snapshot,
                        tool_versions=self.versions, children=self.children,

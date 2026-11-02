@@ -41,6 +41,8 @@ def inspect(data, top, mapped=False):
     totals = dict(cells=0,registered_bits=0,memory_bits=0,arithmetic_cells=0,
                   latches=0,division_modulo=0)
     paths = {}
+    path_metrics = {}
+    path_connections = {}
     visited = set()
 
     def visit(name,path,ancestors):
@@ -53,7 +55,10 @@ def inspect(data, top, mapped=False):
         for cell_name,cell in module.get("cells",{}).items():
             typ = cell["type"]
             if typ in modules:
-                child = visit(typ,f"{path}.{cell_name}".strip("."),ancestors|{name})
+                child_path = f"{path}.{cell_name}".strip(".")
+                path_connections[child_path] = sum(
+                    isinstance(bit,int) for bits in cell.get("connections",{}).values() for bit in bits)
+                child = visit(typ,child_path,ancestors|{name})
                 for k in counts:
                     counts[k]+=child[k]
                 continue
@@ -79,6 +84,7 @@ def inspect(data, top, mapped=False):
         if name not in visited:
             totals["cells"]+=len(module.get("cells",{}))
             visited.add(name)
+        path_metrics[path] = dict(counts)
         return counts
 
     counts = visit(top,"",set())
@@ -91,7 +97,11 @@ def inspect(data, top, mapped=False):
         for path, expected in REQUIRED_PATHS.items():
             if paths.get(path)!=expected:
                 raise AssertionError(f"missing substantive hierarchy {path}: {paths.get(path)}")
-    return dict(top=top,mapped=mapped,structural=totals,hierarchy=paths,
+            if path_metrics[path]["registered_bits"]<=0 or path_connections[path]<=0:
+                raise AssertionError(f"decorative or disconnected required instance: {path}")
+            if expected=="rivet_h5_montgomery" and path_metrics[path]["arithmetic_cells"]<=0:
+                raise AssertionError(f"missing arithmetic in {path}")
+    return dict(top=top,mapped=mapped,structural=totals,hierarchy=paths,path_metrics=path_metrics,
                 retained_modules=sorted(visited))
 
 

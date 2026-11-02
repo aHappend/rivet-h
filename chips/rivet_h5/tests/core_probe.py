@@ -7,6 +7,7 @@ import re
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.dont_write_bytecode = True
 from core_vectors import generate
 from execution import Run
 
@@ -19,6 +20,7 @@ def main():
     root = Path(__file__).resolve().parent.parent
     run = Run(root, "core-smoke", preparation=True, repair_of=args.repair_of)
     result = {}
+    obj = None
     try:
         vectors = run.path / "vectors.txt"
         planned, events = generate(vectors, compact=True)
@@ -53,10 +55,16 @@ def main():
             raise AssertionError("no observed stalls or compact clock bound exceeded")
         result.update(observed=dict(operations=operations,comparisons=comparisons,
                                     stalls=stalls,clocks=clocks))
+        if obj is not None:
+            from simulation import cleanup_objects
+            cleanup_objects(obj)
         run.finish(0,result)
         return 0
     except (OSError, RuntimeError, AssertionError, ValueError) as exc:
         result["failure"] = str(exc)
+        if obj is not None:
+            from simulation import cleanup_objects
+            cleanup_objects(obj)
         run.finish(1,result)
         print(str(exc),file=sys.stderr)
         return 1
