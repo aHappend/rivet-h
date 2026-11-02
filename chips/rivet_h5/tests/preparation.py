@@ -68,15 +68,15 @@ def main():
             from simulation import build, check_counts, simulate
             vectors = run.path/("protocol-vectors-"+secrets.token_hex(4)+".txt")
             with vectors.open("x") as f:
-                for service in range(3):
+                for service in range(6):
                     for phase in range(3):
-                        for reset in (0,1):
+                        for reset in ((1,) if service in (3,4) else (0,1)):
                             f.write(f"9 {service} {phase} {reset}\n")
                 f.write("0 0 0 0\n")
             run.tool_version("verilator","--version")
             argv,obj,_ = build(run,"core_tb","verilator",clock_limit=500000)
             rec,out = simulate(run,argv,vectors,"lifecycle-protocol","verilator")
-            details.update(observed=check_counts(out,dict(operations=19,comparisons=19),"core_tb"),
+            details.update(observed=check_counts(out,dict(operations=31,comparisons=31),"core_tb"),
                            stdout=rec["stdout"],stderr=rec["stderr"])
         else:
             from signature_vectors import boundary_probe

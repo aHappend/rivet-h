@@ -76,10 +76,14 @@ def generate(path, partial, page, compact=False, seeds=(17, 29, 43)):
             # Four channels have live transactions together and interleaved data.
             for length in lengths:
                 messages = [rng.randbytes(length) for _ in range(4)]
-                algorithms = (0, 2, 0, 2)
+                algorithms = (0, 1, 2, 1)
+                keys = [None,rng.randbytes(65),None,rng.randbytes(1)]
                 for ch in range(4):
-                    command(ch, 6 if algorithms[ch] == 2 else 0)
-                    expected(ch, algorithms[ch], messages[ch], queued=True)
+                    if algorithms[ch] == 1:
+                        command(ch,5); command(ch,1); stream(ch,keys[ch],key=True); command(ch,2)
+                    else:
+                        command(ch, 6 if algorithms[ch] == 2 else 0)
+                    expected(ch, algorithms[ch], messages[ch], keys[ch], queued=True)
                 streams = [beats(msg, partial=bool(partial)) for msg in messages]
                 for index in range(max(map(len, streams))):
                     for ch, words in enumerate(streams):
@@ -183,5 +187,25 @@ def generate(path, partial, page, compact=False, seeds=(17, 29, 43)):
                     for length, baddepth in ((0, depth), (page+1, depth), (1, 33)):
                         record(8, length, baddepth, "0")
                         record(11, 0, 1); counts["merkle_results"] += 1
+                    for framing in ("mask", "early_or_late", "late_complete"):
+                        record(8,len(message),depth,f"{index:x}")
+                        if framing == "mask":
+                            record(9,"01020304",5,1)
+                        elif framing == "early_or_late":
+                            record(9,"01000000",8,int(len(message)>1))
+                        else:
+                            words = beats(message)
+                            for data,keep,last in words:
+                                record(9,f"{data:08x}",keep,0)
+                        record(11,0,1); counts["merkle_results"] += 1
+                    if depth:
+                        for framing in ("late", "early") if depth>1 else ("late",):
+                            record(8,len(message),depth,f"{index:x}")
+                            for data,keep,last in beats(message): record(9,f"{data:08x}",keep,last)
+                            for level,sibling in enumerate(siblings):
+                                last = (level==0) if framing=="early" else False
+                                record(10,sibling.hex(),int(last))
+                                if last: break
+                            record(11,0,1); counts["merkle_results"] += 1
         record(0)
     return dict(counts)

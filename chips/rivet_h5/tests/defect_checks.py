@@ -14,7 +14,8 @@ from simulation import build,simulate,cleanup_objects,check_counts
 
 MUTATIONS = (
     dict(name="montgomery-correction",file="rivet_h5_montgomery.sv",
-         before="result <= normalized[22:0];",after="result <= normalized[22:0] ^ 23'd1;",
+         before="upper - {1'b0,Q} : upper",
+         after="upper - ({1'b0,Q} - 25'd1) : upper",
          bench="core_tb",diagnostic="Montgomery a="),
     dict(name="inverse-normalization",file="rivet_h5_ntt.sv",
          before="23'd16382",after="23'd16383",

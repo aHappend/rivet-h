@@ -1,6 +1,7 @@
 """Explicit full-top legal elaboration and executable illegal diagnostics."""
 
 import secrets
+from concurrent.futures import ThreadPoolExecutor
 
 from legacy_checks import wiring
 
@@ -31,15 +32,19 @@ def diagnostic(run, all_legal=False):
         results.append(dict(partial=partial, page=page, stdout=rec["stdout"], stderr=rec["stderr"]))
     legal = range(1,4097) if all_legal else (1,3,4,5,4095,4096)
     timings = []
-    for partial in (0, 1):
-        for page in legal:
-            rec,_,_ = run.command(["iverilog", "-g2012", "-Wall", "-tnull", "-s", "parameter_tb",
-                         "-I", str(directory), f"-Pparameter_tb.PARTIAL_BEATS={partial}",
-                         f"-Pparameter_tb.MAX_PAGE_BYTES={page}", str(bench), *sources],
-                        f"elaborate-p{partial}-page{page}")
-            timings.append(rec["duration_seconds"])
-            if page % 128 == 0:
-                print(f"legal parameter elaboration p={partial} page={page}/4096", flush=True)
+    def elaborate(pair):
+        partial,page = pair
+        rec,_,_ = run.command(["iverilog", "-g2012", "-Wall", "-tnull", "-s", "parameter_tb",
+                     "-I", str(directory), f"-Pparameter_tb.PARTIAL_BEATS={partial}",
+                     f"-Pparameter_tb.MAX_PAGE_BYTES={page}", str(bench), *sources],
+                    f"elaborate-p{partial}-page{page}")
+        return rec["duration_seconds"]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        pairs = [(partial,page) for partial in (0,1) for page in legal]
+        for index,elapsed in enumerate(pool.map(elaborate,pairs),1):
+            timings.append(elapsed)
+            if index % 128 == 0:
+                print(f"legal parameter elaborations {index}/{len(pairs)}", flush=True)
     return dict(legal_elaborations=2*len(legal), illegal_rejections=results,
                 elapsed_compiler_seconds=sum(timings),
                 scope="Full rivet_h5_top elaboration", page_values=list(legal))

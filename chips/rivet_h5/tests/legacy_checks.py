@@ -132,6 +132,13 @@ def check_counts(stdout, inventory):
         raise AssertionError("incomplete observed integration comparisons")
     observed["concurrency"] = dict(zip(("runs","ntt_coefficients","sampler_coefficients",
                                         "signature_results","legacy_transfers"),values))
+    simultaneous = re.findall(r"INTEGRATION simultaneous_starts=(\d+) all_active_legacy_transfers=(\d+)",stdout)
+    if len(simultaneous)!=1:
+        raise AssertionError("missing simultaneous integration event accounting")
+    starts,transfers = map(int,simultaneous[0])
+    if starts!=values[0] or (values[0]>0 and transfers<=0):
+        raise AssertionError("new services were not simultaneously active during legacy transfers")
+    observed["concurrency"].update(simultaneous_starts=starts,all_active_legacy_transfers=transfers)
     return observed
 
 

@@ -30,6 +30,10 @@ def generate(path, compact=False, seeds=(17, 29, 43)):
         for seed in seeds[:1] if compact else seeds:
             rng = random.Random(seed)
             pairs = [(a, b) for a in boundary for b in boundary]
+            # (-1)*(-R) has Montgomery result 1, and its unreduced upper word
+            # exceeds q: this executes the conditional correction, not just
+            # the final output assignment.
+            pairs.append((Q-1,Q-(R % Q)))
             pairs += [(rng.randrange(Q), rng.randrange(Q))
                       for _ in range(8 if compact else 4096)]
             for a, b in pairs:
@@ -111,6 +115,8 @@ def generate(path, compact=False, seeds=(17, 29, 43)):
         coverage["comparisons"] += 1
         record(6,0,256,2,hexes([0]*255+[Q]))
         coverage["comparisons"] += 1
+        record(11,0,256,1,hexes([0]*256))
+        coverage["comparisons"] += 1
         for op in range(5,8):
             record(7,op,0,"0","0",1)
             coverage["comparisons"] += 1
@@ -118,9 +124,9 @@ def generate(path, compact=False, seeds=(17, 29, 43)):
             record(7,op,3,"0","0",1)
             coverage["comparisons"] += 1
         if not compact:
-            for service in range(3):
+            for service in range(6):
                 for phase in range(3):
-                    for reset in (0,1):
+                    for reset in ((1,) if service in (3,4) else (0,1)):
                         record(9, service, phase, reset)
                         coverage[f"termination_service_{service}_phase_{phase}_reset_{reset}"] += 1
                         coverage["comparisons"] += 1
@@ -131,8 +137,17 @@ def generate(path, compact=False, seeds=(17, 29, 43)):
                             result = sample(0, 0, bytes(64), 0)
                             record(3,0,0,"0","0",0,hexes(result))
                             coverage["comparisons"] += 257
-                        else:
+                        elif service == 2:
                             output = hashlib.shake_256(b"").digest(17)
                             record(4,1,0,17,hexes(output))
                             coverage["comparisons"] += 17
+                        elif service == 3:
+                            record(0,"0","0","0")
+                            coverage["comparisons"] += 1
+                        elif service == 4:
+                            record(1,0,"0","0","0","0","0")
+                            coverage["comparisons"] += 2
+                        else:
+                            record(5,1,1,"0","2b")
+                            coverage["comparisons"] += 1
     return dict(coverage), dict(sampler_events)

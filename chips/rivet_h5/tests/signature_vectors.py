@@ -170,13 +170,21 @@ def boundary_probe(path, fixture_path):
             pk, sig, message, context = (bytes.fromhex(case[key]) for key in
                                          ("pk", "signature", "message", "context"))
             w.reset()
-            # Invalid public-key framing cannot atomically pin a key.
-            for kind, keep, last in ((1,15,0),(0,5,0),(0,15,1),(0,8,0)):
-                w.command(level, 0); w.beat(kind, int.from_bytes(pk[:4],"big"), keep, last)
-                w.result(2, locked=False, label="provision_framing")
+            provision_frames(w,pk,level)
             w.provision(pk, level)
             boundaries(w, pk, sig, message, context, level)
     return dict(counts=dict(w.counts), cases=w.cases, public_kat_validation=kats)
+
+
+def provision_frames(w,pk,level):
+    # Invalid public-key framing cannot atomically pin a key.
+    for kind,keep,last in ((1,15,0),(0,5,0),(0,15,1),(0,8,0)):
+        w.command(level,0); w.beat(kind,int.from_bytes(pk[:4],"big"),keep,last)
+        w.result(2,locked=False,label="provision_framing")
+    w.command(level,0)
+    for offset in range(0,len(pk),4):
+        w.beat(0,int.from_bytes(pk[offset:offset+4],"big"),15,False)
+    w.result(2,locked=False,label="provision_missing_last")
 
 
 def generate(path,fixture_path,compact=False,seeds=(17,29,43)):
@@ -191,6 +199,8 @@ def generate(path,fixture_path,compact=False,seeds=(17,29,43)):
             t = next(t for t in group["tests"] if t["testPassed"])
             pk = bytes.fromhex(t["pk"])
             w.reset()
+            if not compact:
+                provision_frames(w,pk,level)
             w.provision(pk,level)
             result = w.verification(pk,bytes.fromhex(t["signature"]),
                                     bytes.fromhex(t["message"]),bytes.fromhex(t["context"]),

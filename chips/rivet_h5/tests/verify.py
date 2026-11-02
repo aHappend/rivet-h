@@ -6,6 +6,7 @@ Physical timing and hardware gates are owned by the shared runtime.
 
 import argparse
 import json
+import re
 from pathlib import Path
 import secrets
 import shutil
@@ -31,6 +32,17 @@ def core(run, compact=False, simulator="verilator"):
         rec, stdout = simulate(run, argv, vectors, "core-" + simulator, simulator)
         observed = check_counts(stdout, inventory, "core_tb")
         if not compact:
+            for seed in (17,29,43):
+                for label,minimum in ((f"montgomery_seed_{seed}",4160),
+                    (f"butterfly_0_seed_{seed}",1024),(f"butterfly_1_seed_{seed}",1024),
+                    (f"forward_seed_{seed}",24),(f"inverse_seed_{seed}",24),
+                    (f"convolution_seed_{seed}",8)):
+                    if inventory.get(label,0)<minimum:
+                        raise AssertionError(f"missing required numerical matrix: {label}")
+                for level in range(3):
+                    for op in range(5):
+                        if inventory.get(f"sampler_{op}_level_{level}_seed_{seed}",0)<4:
+                            raise AssertionError("missing required sampler seed/level/mode comparisons")
             for op in (0, 1, 2, 4):
                 if events[f"op_{op}_rejected"] <= 0:
                     raise AssertionError(f"sampler op {op}: no oracle-confirmed rejection exercised")
@@ -52,9 +64,35 @@ def signatures(run, compact=False):
     argv, obj, observation = build(run, "signature_tb", "verilator", observe=True)
     try:
         rec, stdout = simulate(run, argv, vectors, "signature-comparisons", "verilator")
+        observed = check_counts(stdout, inventory["counts"], "signature_tb")
+        valid = [case for case in inventory["cases"] if case["expected_auth"]]
+        if not compact:
+            for seed in (17,29,43):
+                for level in range(3):
+                    cases = [case for case in valid if case["label"].startswith(
+                             f"valid_seed_{seed}_level_{level}_case_")]
+                    if len(cases)<4 or any(case["oracle"]["hint_count"]<=0 for case in cases):
+                        raise AssertionError("missing valid contextual signature/nonzero hint comparisons")
+            for name in ("forged_message","forged_context","forged_challenge","forged_z","forged_hints"):
+                cases = [case for case in inventory["cases"] if case["label"]==name]
+                if len(cases)<36 or any(case["expected_auth"] for case in cases):
+                    raise AssertionError("missing independently confirmed forgery comparisons")
         return dict(inventory=inventory, observation=observation,
-                    observed=check_counts(stdout, inventory["counts"], "signature_tb"),
+                    observed=observed,
                     stdout=rec["stdout"], stderr=rec["stderr"])
+    finally:
+        cleanup_objects(obj)
+
+
+def signature_startup(run):
+    argv,obj,_ = build(run,"signature_startup_tb","icarus")
+    try:
+        rec,out,_ = run.command(argv,"icarus-signature-startup",timeout=600)
+        matches = re.findall(r"SUMMARY results=(\d+) cancels=(\d+) resets=(\d+) clocks=(\d+)",out)
+        if len(matches)!=1 or tuple(map(int,matches[0][:3]))!=(5,2,1):
+            raise AssertionError("signature startup protocol comparisons missing")
+        return dict(results=5,cancels=2,resets=1,clocks=int(matches[0][3]),
+                    stdout=rec["stdout"],stderr=rec["stderr"])
     finally:
         cleanup_objects(obj)
 
@@ -63,7 +101,7 @@ def behavior(run):
     from legacy_checks import suite as legacy
     from parameter_checks import suite as parameters
     from parser_checks import suite as parser
-    return dict(icarus=core(run, compact=True, simulator="icarus"),
+    return dict(icarus=core(run, compact=True, simulator="icarus"),signature_startup=signature_startup(run),
                 compiled_core=core(run), signatures=signatures(run),
                 directed_parser=parser(run), legacy=legacy(run), parameters=parameters(run))
 
@@ -104,7 +142,7 @@ def portable(run):
 
 def portable_child(run):
     from legacy_checks import suite as legacy
-    return dict(icarus=core(run, compact=True, simulator="icarus"),
+    return dict(icarus=core(run, compact=True, simulator="icarus"),signature_startup=signature_startup(run),
                 verilator=core(run, compact=True), signatures=signatures(run, compact=True),
                 legacy=legacy(run, compact=True),
                 synthesis=synthesize(run, "rivet_h5_montgomery", mapped=True))
