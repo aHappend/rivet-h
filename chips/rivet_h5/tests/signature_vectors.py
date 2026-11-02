@@ -39,8 +39,8 @@ class Writer:
             self.beat(kind,int.from_bytes(part.ljust(4,b"\0"),"big"),
                       keep,offset+len(part)==len(data))
 
-    def result(self, status, auth=False, locked=True, check=b"", label=None):
-        self.record(12,status,int(auth),int(locked),len(check),
+    def result(self, status, auth=False, locked=True, check=b"", label=None, hold=False):
+        self.record(15 if hold else 12,status,int(auth),int(locked),len(check),
                     f"{int.from_bytes(check,'little'):0128x}")
         self.counts["results"]+=1
         self.counts["challenge_bytes"]+=len(check)
@@ -71,6 +71,114 @@ class Writer:
         self.counts["cancels"]+=1
 
 
+def boundaries(w, pk, sig, message, context, level):
+    p = PARAMS[level]
+    c, z, hints = decode_signature(sig, level)
+    limit = p["gamma1"] - p["beta"]
+    for signum in (-1, 1):
+        for delta in (0, -1):
+            zs = [[0] * 256 for _ in range(p["l"])]
+            zs[0][0] = (signum * (limit + delta)) % Q
+            forged = encode_signature(bytes(p["cbytes"]), zs, [[0]*256 for _ in range(p["k"])], level)
+            expected = w.verification(pk, forged, b"", b"", level, f"norm_{signum}_{delta}")
+            assert expected["status"] == (4 if delta == 0 else 5)
+    hint_base = p["sigbytes"] - p["omega"] - p["k"]
+    for name in ("omega", "omega_plus_one", "descending", "duplicate", "decreasing_endpoints", "unused"):
+        zs = [[0]*256 for _ in range(p["l"])]
+        hs = [[0]*256 for _ in range(p["k"])]
+        hs[0][:p["omega"]] = [1]*p["omega"]
+        raw = bytearray(encode_signature(bytes(p["cbytes"]), zs, hs, level))
+        if name == "omega_plus_one":
+            raw[hint_base+p["omega"]:] = bytes([p["omega"]+1])*p["k"]
+        elif name == "descending":
+            raw[hint_base:hint_base+2] = b"\x02\x01"
+        elif name == "duplicate":
+            raw[hint_base:hint_base+2] = b"\x01\x01"
+        elif name == "decreasing_endpoints":
+            raw[hint_base+p["omega"]+1] = p["omega"]-1
+        elif name == "unused":
+            raw[hint_base+p["omega"]:] = bytes(p["k"])
+            raw[hint_base] = 1
+        outcome = w.verification(pk, bytes(raw), b"", b"", level, "hint_" + name)
+        assert outcome["status"] == (5 if name == "omega" else 3)
+    # Each malformed stream is stopped at the first invalid transfer, not hidden
+    # behind a fixture parse failure or an unanswered continuation.
+    for name in ("early_last", "late_last", "overflow", "wrong_kind", "invalid_mask", "nonfinal_partial"):
+        w.command(level, 1, 0, 0)
+        if name in ("early_last", "wrong_kind", "invalid_mask", "nonfinal_partial"):
+            w.beat(0 if name == "wrong_kind" else 1, int.from_bytes(sig[:4], "big"),
+                   5 if name == "invalid_mask" else 8 if name == "nonfinal_partial" else 15,
+                   name == "early_last")
+        else:
+            for offset in range(0, len(sig), 4):
+                chunk = sig[offset:offset+4]
+                final = offset+len(chunk) == len(sig)
+                if final:
+                    w.beat(1, int.from_bytes(chunk.ljust(4, b"\0"), "big"),
+                           15 if name == "overflow" else {1:8,2:12,3:14,4:15}[len(chunk)], False)
+                else:
+                    w.beat(1, int.from_bytes(chunk, "big"), 15, False)
+        w.result(2, label="signature_framing_" + name)
+    for section in ("context", "message"):
+        for name in ("early", "late", "overflow", "wrong_kind", "empty_nonzero"):
+            length = 0 if name == "empty_nonzero" else 4 if name == "late" else 3 if name == "overflow" else 8
+            w.command(level, 1, length if section == "context" else 0,
+                      length if section == "message" else 0)
+            w.section(1, sig)
+            if section == "message":
+                w.section(2, b"")
+            kind = 2 if section == "context" else 3
+            w.beat(1 if name == "wrong_kind" else kind, 0x01020304, 15, name != "late")
+            w.result(2, label=section + "_framing_" + name)
+    # Level mismatch preserves the provisioned trusted key.
+    w.command((level+1) % 3, 1)
+    w.result(1, label="mismatched_key_level")
+    # CANCEL and reset while an actual, already compared result is pending.
+    valid = verify(pk, sig, message, context, level)
+    assert valid["auth"]
+    for termination in ("cancel", "reset"):
+        w.command(level, 1, len(context), len(message))
+        w.section(1, sig); w.section(2, context); w.section(3, message)
+        w.result(0, True, True, bytes.fromhex(valid["challenge"]), "pending_" + termination, hold=True)
+        if termination == "cancel":
+            w.cancel()
+        else:
+            w.reset()
+            w.provision(pk, level)
+        w.verification(pk, sig, message, context, level, termination + "_output_recovery")
+    for phase in ("receive", "compute"):
+        w.command(level, 1, len(context), len(message))
+        if phase == "receive":
+            w.beat(1, int.from_bytes(sig[:4], "big"), 15, False)
+            w.reset()
+        else:
+            w.section(1, sig)
+            w.reset(delay=200)
+        w.command(level, 1); w.result(1, locked=False, label="reset_" + phase + "_cleared_key")
+        w.provision(pk, level)
+        w.verification(pk, sig, message, context, level, "reset_" + phase + "_recovery")
+
+
+def boundary_probe(path, fixture_path):
+    fixture = json.loads(fixture_path.read_text())
+    kats = crosscheck_kats(fixture)
+    with path.open("x", encoding="ascii") as f:
+        w = Writer(f)
+        for group in fixture["testGroups"]:
+            level = ("ML-DSA-44","ML-DSA-65","ML-DSA-87").index(group["parameterSet"])
+            case = next(case for case in group["tests"] if case["testPassed"])
+            pk, sig, message, context = (bytes.fromhex(case[key]) for key in
+                                         ("pk", "signature", "message", "context"))
+            w.reset()
+            # Invalid public-key framing cannot atomically pin a key.
+            for kind, keep, last in ((1,15,0),(0,5,0),(0,15,1),(0,8,0)):
+                w.command(level, 0); w.beat(kind, int.from_bytes(pk[:4],"big"), keep, last)
+                w.result(2, locked=False, label="provision_framing")
+            w.provision(pk, level)
+            boundaries(w, pk, sig, message, context, level)
+    return dict(counts=dict(w.counts), cases=w.cases, public_kat_validation=kats)
+
+
 def generate(path,fixture_path,compact=False,seeds=(17,29,43)):
     fixture = json.loads(fixture_path.read_text())
     kat_outcomes = crosscheck_kats(fixture)
@@ -88,6 +196,9 @@ def generate(path,fixture_path,compact=False,seeds=(17,29,43)):
                                     bytes.fromhex(t["message"]),bytes.fromhex(t["context"]),
                                     level,f"public_kat_level_{level}_tc_{t['tcId']}")
             assert result["auth"]
+            if not compact:
+                boundaries(w, pk, bytes.fromhex(t["signature"]), bytes.fromhex(t["message"]),
+                           bytes.fromhex(t["context"]), level)
         if not compact:
             for seed in seeds:
                 rng = random.Random(seed)

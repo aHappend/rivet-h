@@ -80,7 +80,7 @@ def suite(run, selection=None):
     results = []
     selected = MUTATIONS if selection is None else tuple(
         mutation for mutation in MUTATIONS if mutation["name"] in selection)
-    if not selected:
+    if not selected and selection != ("legacy-digest",):
         raise ValueError("empty diagnostic mutation selection")
     for mutation in selected:
         copy_root = run.path/("mutant-"+mutation["name"]+"-"+secrets.token_hex(4))
@@ -113,5 +113,47 @@ def suite(run, selection=None):
                                     if mutation["diagnostic"] in line)))
         finally:
             cleanup_objects(obj)
+    if selection is None or "legacy-digest" in selection:
+        results.append(legacy_mutation(run))
     return dict(baselines=baselines,mutations=results,
                 core_inventory=core_coverage,signature_inventory=signature_coverage)
+
+
+def legacy_mutation(run):
+    from legacy_checks import build as legacy_build, check_counts as legacy_counts
+    from legacy_vectors import generate as legacy_generate
+    path = run.path/("legacy-defect-vectors-"+secrets.token_hex(4)+".txt")
+    inventory = legacy_generate(path,1,3,compact=True)
+    argv,obj,parent = legacy_build(run,1,3)
+    try:
+        rec,out,_ = run.command([*argv,"+vectors="+str(path)],"unchanged-legacy-baseline")
+        baseline = dict(stdout=rec["stdout"],stderr=rec["stderr"],
+                        observed=legacy_counts(out,inventory),parent_copy=parent)
+    finally:
+        cleanup_objects(obj)
+    copied = run.path/("mutant-legacy-digest-"+secrets.token_hex(4))
+    (copied/"rtl").mkdir(parents=True)
+    for source in sorted(run.root.glob("rtl/*.sv")):
+        shutil.copyfile(source,copied/"rtl"/source.name)
+    source = copied/"rtl/rivet_h3_top.sv"
+    original = digest(source)
+    before = "channel_digest[digest_grant] : 512'd0;"
+    after = "(channel_digest[digest_grant] ^ 512'd1) : 512'd0;"
+    text = source.read_text()
+    if text.count(before)!=1:
+        raise AssertionError("legacy digest mutation anchor not unique")
+    source.write_text(text.replace(before,after))
+    argv,obj,parent = legacy_build(run,1,3,source_root=copied)
+    try:
+        rec,out,err = run.command([*argv,"+vectors="+str(path)],"mutated-legacy-digest",
+                                  expect_failure=True)
+        diagnostic = "parent interface mismatch: m_digest"
+        if rec["exit_status"]==0 or rec["timed_out"] or diagnostic not in out+err:
+            raise AssertionError("legacy public-pin oracle did not detect disposable digest defect")
+        return dict(name="legacy-digest",original_sha256=original,mutated_sha256=digest(source),
+                    file=run.relative(source),before=before,after=after,baseline=baseline,
+                    stdout=rec["stdout"],stderr=rec["stderr"],exit_status=rec["exit_status"],
+                    discriminating_failure=next(line for line in (out+err).splitlines()
+                                                if diagnostic in line))
+    finally:
+        cleanup_objects(obj)

@@ -117,4 +117,22 @@ def generate(path, compact=False, seeds=(17, 29, 43)):
         for op in range(5):
             record(7,op,3,"0","0",1)
             coverage["comparisons"] += 1
+        if not compact:
+            for service in range(3):
+                for phase in range(3):
+                    for reset in (0,1):
+                        record(9, service, phase, reset)
+                        coverage[f"termination_service_{service}_phase_{phase}_reset_{reset}"] += 1
+                        coverage["comparisons"] += 1
+                        # Public numerical restart comparisons follow every termination.
+                        if service == 0:
+                            ntt([0]*N, False, "ntt_termination_recovery")
+                        elif service == 1:
+                            result = sample(0, 0, bytes(64), 0)
+                            record(3,0,0,"0","0",0,hexes(result))
+                            coverage["comparisons"] += 257
+                        else:
+                            output = hashlib.shake_256(b"").digest(17)
+                            record(4,1,0,17,hexes(output))
+                            coverage["comparisons"] += 17
     return dict(coverage), dict(sampler_events)
