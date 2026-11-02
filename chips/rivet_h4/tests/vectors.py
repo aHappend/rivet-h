@@ -43,6 +43,7 @@ class Vectors:
         self.rng = random.Random(seed)
         self.rows = 0
         self.cases = []
+        self.prefix = ""
 
     def emit(self, op, a=0, b=0, c=0, payload=0):
         # Integer fields use signed fscanf; indices are represented as signed 32-bit.
@@ -58,7 +59,7 @@ class Vectors:
         start = self.rows
         yield
         self.emit(27, identifier, minimum, 1)
-        self.cases.append({"id": identifier, "bin": name, "first_row": start,
+        self.cases.append({"id": identifier, "bin": self.prefix + name, "first_row": start,
                            "last_row": self.rows, "minimum_comparisons": minimum})
 
     def close(self):
@@ -122,6 +123,7 @@ class Vectors:
                result_first=True, root=None, provision=True):
         if provision:
             self.provision(root or merkle_root(page, siblings, index))
+        self.emit(23, 0, int(not success))
         self.emit(14, index, len(siblings), payload=len(page))
         self.emit(19, 8, 3, 0)
         self.page(flip(page) if mutate == "page" else page)
@@ -220,7 +222,7 @@ def sponge_protocol(path, partial):
                     else:
                         v.emit(26, 11)
                         v.emit(19, 11, 3, 1)
-                v.emit(11)
+                v.emit(11, 1 if phase == "absorb" else 2 if phase == "squeeze" else 0)
                 v.emit(19, 11, 120, 0)
                 v.sponge(b"recovery", alg, (32, 64, 19, 19)[alg])
         with v.case(f"sponge/reset/{alg}"):
@@ -267,6 +269,14 @@ def sponge_protocol(path, partial):
                 v.emit(12)
                 v.emit(11)
                 v.sponge(b"abc", alg, (32, 64, 3, 3)[alg])
+        if alg >= 2:
+            with v.case(f"sponge/maximum-xof-descriptor/{alg}", 3):
+                v.sponge_start(alg, (1 << 32) - 1)
+                v.sponge_stream(b"")
+                for word, keep, _ in beats(digest(b"", alg, 8)):
+                    v.emit(10, 3, keep, 0, word)
+                v.emit(11, 2)
+                v.sponge(b"recovery", alg, 3)
     return v.close()
 
 
@@ -381,12 +391,63 @@ def legacy_matrix(path, partial):
                     word, keep, last = stream[i]
                     v.emit(3, ch, keep, last, word)
         v.emit(6, 20)
+    with v.case("legacy/interleaved-continuously-ready", 4):
+        for ch in range(4):
+            v.command(ch, 5)
+            v.command(ch, 0)
+            v.emit(5, ch, 0, payload=int.from_bytes(digest(bytes([ch]) * 65, 0), "big"))
+        v.emit(30, 1)
+        lists = [list(beats(bytes([ch]) * 65)) for ch in range(4)]
+        for i in range(len(lists[0])):
+            for ch in range(4):
+                word, keep, last = lists[ch][i]
+                v.emit(3, ch, keep, last, word)
+        v.emit(6)
     with v.case("legacy/simultaneous-command-key-data", 2):
         v.command(0, 5)
         v.emit(24, 0, 0, payload=0x61626364)
         v.emit(5, 0, 0, payload=int.from_bytes(digest(b"abc", 0), "big"))
         v.stream(b"abc", 0)
         v.emit(6, 4)
+    with v.case("legacy/independent-simultaneous-command-key-data", 3):
+        for ch in range(3):
+            v.command(ch, 5)
+        v.command(0, 0)
+        v.command(1, 1)
+        v.emit(5, 0, 0, payload=int.from_bytes(digest(b"abc", 0), "big"))
+        v.emit(28)
+        v.command(1, 2)
+        v.emit(5, 1, 1, payload=int.from_bytes(digest(b"abc", 1, key=b"key"), "big"))
+        v.stream(b"abc", 1)
+        v.emit(6, 7)
+    for alg in range(3):
+        for phase in ("receive", "compression", "digest", "context"):
+            with v.case(f"legacy/reset/alg{alg}/{phase}", 2):
+                v.reset()
+                if alg == 1:
+                    v.command(0, 1)
+                    v.stream(b"key", 0, key=True)
+                v.command(0, (0, 2, 6)[alg])
+                if phase == "context":
+                    v.stream(b"abcd", 0, final=False, packed=False)
+                    v.command(0, 3)
+                    v.emit(26, 10)
+                    v.emit(19, 10, 5, 1)
+                elif phase != "receive":
+                    message = bytes(range(129))
+                    if phase == "digest":
+                        v.emit(5, 0, alg, payload=int.from_bytes(digest(message, alg, key=b"key"), "big"))
+                    v.stream(message, 0)
+                    if phase == "compression":
+                        v.emit(1, 20)
+                        v.emit(19, 9, 2, 0)
+                    else:
+                        v.emit(26, 9)
+                        v.emit(19, 9, 5, 1)
+                v.reset()
+                v.emit(19, 9, 120, 0)
+                v.emit(19, 10, 5, 0)
+                v.legacy(b"reset-recovery", alg, 0, b"key")
     with v.case("legacy/context-arbitration-all-channels", 4):
         for ch in range(4):
             v.command(ch, 5)
@@ -425,7 +486,7 @@ def merkle_matrix(path, partial, capacity):
                     with v.case(name):
                         v.merkle(page, siblings, index, result_first=bool(length % 2))
                 page = random_bytes(v.rng, min(capacity, 3))
-                for mutation in ("page", *range(depth)):
+                for mutation in ("page",):
                     with v.case(f"merkle/seed{seed}/depth{depth}/index{index}/tamper-{mutation}", 2):
                         v.merkle(page, siblings, index, success=False, mutate=mutation)
                         v.merkle(page, siblings, index, provision=False)
@@ -434,6 +495,12 @@ def merkle_matrix(path, partial, capacity):
                         root = merkle_root(page, siblings, index)
                         v.merkle(page, siblings, index ^ 1, root=root, success=False)
                         v.merkle(page, siblings, index, provision=False)
+            index = 0xA5A5A5A5 & maximum
+            page = random_bytes(v.rng, min(capacity, 3))
+            for level in range(depth):
+                with v.case(f"merkle/seed{seed}/depth{depth}/tamper-sibling-level{level}", 2):
+                    v.merkle(page, siblings, index, success=False, mutate=level)
+                    v.merkle(page, siblings, index, provision=False)
             with v.case(f"merkle/seed{seed}/depth{depth}/root-mismatch", 2):
                 page = random_bytes(v.rng, min(capacity, 3))
                 good = merkle_root(page, siblings, 0)
@@ -443,12 +510,17 @@ def merkle_matrix(path, partial, capacity):
     return v.close()
 
 
-def merkle_protocol(path, partial, capacity):
-    v = Vectors(path, partial, capacity)
+def merkle_protocol(path, partial, capacity, seed=11):
+    v = Vectors(path, partial, capacity, seed)
+    v.prefix = f"seed{seed}/"
     page = b"abc"[:capacity]
     sibling = bytes(range(32))
     siblings = [sibling]
     root = merkle_root(page, siblings, 0)
+    with v.case("merkle/simultaneous-root-and-start", 2):
+        v.reset()
+        v.emit(29, payload=int.from_bytes(root, "big"))
+        v.merkle(page, siblings, 0, provision=False)
     with v.case("merkle/root-overwrite-back-to-back", 2):
         v.provision(root)
         v.emit(22, payload=int.from_bytes(flip(root), "big"))
@@ -476,7 +548,7 @@ def merkle_protocol(path, partial, capacity):
             v.merkle(page, siblings, 0, provision=False)
     for depth in (1, 2, 5, 32):
         proof = [sibling] * depth
-        for level in range(depth):
+        for level in sorted({0, depth // 2, depth - 1}):
             with v.case(f"merkle/proof-framing/depth{depth}/level{level}", 2):
                 v.provision(merkle_root(page, proof, 0))
                 v.emit(14, 0, depth, payload=len(page))

@@ -190,6 +190,16 @@ def self_check():
     assert digest(b"abc", 0).hex() == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
     assert digest(b"", 0, 32).hex() == "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a"
     assert digest(b"abc", 0, 32).hex() == "3a985da74fe225b2045c172d6bd390bd855f086e3e9d525b46bfe24511431532"
+    assert digest(b"", 1, 64).hex() == (
+        "a69f73cca23a9ac5c8b567dc185a756e97c982164fe25859e0d1dcc1475c80a615"
+        "b2123af1f5f94c11e3e9402c3ac558f500199d95b6d3e301758586281dcd26")
+    assert digest(b"abc", 1, 64).hex() == (
+        "b751850b1a57168a5693cd924b6b096e08f621827444f70d884f5d0240d2712e10"
+        "e116e9192af3c91a7ec57647e3934057340b4cf408d5a56592f8274eec53f0")
+    assert digest(b"", 2, 16).hex() == "7f9c2ba4e88f827d616045507605853e"
+    assert digest(b"abc", 2, 16).hex() == "5881092dd818bf5cf8a3ddb793fbcba7"
+    assert digest(b"", 3, 32).hex() == "46b9dd2b0ba88d13233b3feb743eeb243fcd52ea62b81b82b50c27646ed5762f"
+    assert digest(b"abc", 3, 32).hex() == "483366601360a8771c6863080cc4114d8db44530f8f1e1ee4f94ea37e78b5739"
     for width, function in ((32, hashlib.sha256), (64, hashlib.sha512)):
         for message in (b"", b"abc", bytes(range(256))):
             block = width * 2
